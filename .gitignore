@@ -1,0 +1,88 @@
+# dependencies
+node_modules/
+
+# expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macos
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+.env
+
+# Environment variables for client and backend
+client/.env
+client/.env.local
+client/.env.development.local
+client/.env.test.local
+client/.env.production.local
+
+backend/.env
+backend/.env.local
+backend/.env.development.local
+backend/.env.test.local
+backend/.env.production.local
+
+# typescript
+*.tsbuildinfo
+
+# Additional common ignores
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Dependency directories
+node_modules/
+jspm_packages/
+client/node_modules/
+backend/node_modules/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+Thumbs.db
