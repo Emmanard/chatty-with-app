@@ -12,8 +12,10 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "We need camera access to allow you to upload a profile picture.",
-        "NSPhotoLibraryUsageDescription": "We need photo library access to let you select a profile picture."
-      }
+        "NSPhotoLibraryUsageDescription": "We need photo library access to let you select a profile picture.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.emmanard9.exponativewind"
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +26,8 @@
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
-      ]
+      ],
+      "package": "com.emmanard9.exponativewind"
     },
     "plugins": [
       "expo-router",
@@ -33,8 +36,10 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "your-eas-project-id"
-      }
-    }
+        "projectId": "8282d554-dab2-476d-b2f2-8402cbe2279f"
+      },
+      "router": {}
+    },
+    "owner": "emmanard9"
   }
 }

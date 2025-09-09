@@ -4,7 +4,7 @@ import Toast from 'react-native-toast-message';
 import { io } from 'socket.io-client';
 import { router } from 'expo-router';
 
-const BASE_URL = __DEV__ ? 'http://10.196.53.134:5001' : '/';
+const BASE_URL = 'https://chatty-with-app.onrender.com';
 
 interface AuthUser {
   _id: string;
