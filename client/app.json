@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "expo-nativewind",
-    "slug": "expo-nativewind",
+    "name": "ConvoWave",
+    "slug": "ConvoWave",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "assets/images/Image_fx.jpg",
     "scheme": "boltapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -15,11 +15,11 @@
         "NSPhotoLibraryUsageDescription": "We need photo library access to let you select a profile picture.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.emmanard9.exponativewind"
+      "bundleIdentifier": "com.emmanard9.ConvoWave"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "assets/images/Image_fx.jpg",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
@@ -27,7 +27,7 @@
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
       ],
-      "package": "com.emmanard9.exponativewind"
+      "package": "com.emmanard9.ConvoWave"
     },
     "plugins": [
       "expo-router",
