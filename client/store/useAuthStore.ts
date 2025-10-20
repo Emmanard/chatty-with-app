@@ -30,8 +30,9 @@ interface AuthStore {
   login: (data: { email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: { profilePic: string }) => Promise<void>;
-  verifyOTP: (data: { email: string; otp: string }) => Promise<boolean>;
-  resendOTP: (email: string) => Promise<boolean>;
+  // OTP functions commented
+  // verifyOTP: (data: { email: string; otp: string }) => Promise<boolean>; // OTP
+  // resendOTP: (email: string) => Promise<boolean>; // OTP
   connectSocket: () => void;
   disconnectSocket: () => void;
 }
@@ -64,17 +65,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const res = await axiosInstance.post('/auth/signup', data);
       
+      // Update authUser state immediately after signup
+      set({ authUser: res.data });
+
       Toast.show({ 
         type: 'success', 
-        text1: 'Account created!',
-        text2: 'Please check your email for verification code'
+        text1: 'Account created successfully'
       });
-      
-      router.push({
-        pathname: '/(auth)/otp',
-        params: { email: data.email }
-      });
-      
+
+      // Navigate directly to home screen
+      router.replace('/(tabs)');
+
     } catch (error: any) {
       Toast.show({ type: 'error', text1: error.response?.data?.message || 'Signup failed' });
     } finally {
@@ -87,6 +88,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const res = await axiosInstance.post('/auth/login', data);
       
+      // OTP check commented
+      /*
       if (res.data.requiresEmailVerification) {
         Toast.show({ 
           type: 'info', 
@@ -98,11 +101,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           params: { email: data.email }
         });
       } else {
+      */
         set({ authUser: res.data });
         Toast.show({ type: 'success', text1: 'Logged in successfully' });
         get().connectSocket();
         router.replace('/(tabs)');
+      /*
       }
+      */
     } catch (error: any) {
       Toast.show({ type: 'error', text1: error.response?.data?.message || 'Login failed' });
     } finally {
@@ -135,6 +141,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
+  // OTP functions commented out
+  /*
   verifyOTP: async (data) => {
     set({ isVerifyingOTP: true });
     try {
@@ -165,6 +173,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       set({ isResendingOTP: false });
     }
   },
+  */
 
   connectSocket: () => {
     const { authUser } = get();

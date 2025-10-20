@@ -17,8 +17,8 @@ router.post("/login", login);
 router.post("/logout", logout);
 
 // Add these new OTP routes
-router.post("/verify-otp", verifyOTP);
-router.post("/resend-otp", resendOTP);
+// router.post("/verify-otp", verifyOTP);
+// router.post("/resend-otp", resendOTP);
 
 router.put("/update-profile", protectRoute, updateProfile);
 router.get("/check", protectRoute, checkAuth);
