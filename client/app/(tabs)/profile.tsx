@@ -13,9 +13,11 @@ import {
 import { Camera, Mail, User } from 'lucide-react-native';
 import { useAuthStore } from '../../store/useAuthStore';
 import * as ImagePicker from 'expo-image-picker';
+import { useUpdateProfile } from '../../hooks/useAuth';
 
 export default function ProfileScreen() {
-  const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
+  const { authUser } = useAuthStore();
+  const updateProfileMutation = useUpdateProfile();
   const [selectedImg, setSelectedImg] = useState<string | null>(null);
 
   const handleImageUpload = async () => {
@@ -44,7 +46,7 @@ export default function ProfileScreen() {
       if (!result.canceled && result.assets[0]) {
         const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
         setSelectedImg(base64Image);
-        await updateProfile({ profilePic: base64Image });
+        updateProfileMutation.mutate({ profilePic: base64Image });
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image');
@@ -52,7 +54,6 @@ export default function ProfileScreen() {
     }
   };
 
-  // Function to format the date
   const formatMemberSince = (dateString: string | Date) => {
     try {
       const date = new Date(dateString);
@@ -93,12 +94,12 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={[
                   styles.cameraButton,
-                  isUpdatingProfile && styles.cameraButtonDisabled,
+                  updateProfileMutation.isPending && styles.cameraButtonDisabled,
                 ]}
                 onPress={handleImageUpload}
-                disabled={isUpdatingProfile}
+                disabled={updateProfileMutation.isPending}
               >
-                {isUpdatingProfile ? (
+                {updateProfileMutation.isPending ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
                   <Camera size={20} color="white" />
@@ -106,7 +107,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
             <Text style={styles.avatarText}>
-              {isUpdatingProfile
+              {updateProfileMutation.isPending
                 ? 'Uploading...'
                 : 'Click the camera icon to update your photo'}
             </Text>

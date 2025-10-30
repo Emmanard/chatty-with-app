@@ -1,40 +1,27 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
   ScrollView as RNScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChatStore } from '../store/useChatStore';
 import { useAuthStore } from '../store/useAuthStore';
+import { useMessages } from '../hooks/useChat';
 import ChatHeader from './ChatHeader';
 import MessageInput from './MessageInput';
 import Message from './Message';
 
 export default function ChatContainer() {
-  const {
-    messages,
-    getMessages,
-    isMessagesLoading,
-    selectedUser,
-    subscribeToMessages,
-    unsubscribeFromMessages,
-  } = useChatStore();
+  const { selectedUser } = useChatStore();
   const { authUser } = useAuthStore();
+  const { data: messages = [], isLoading: isMessagesLoading } = useMessages(selectedUser?._id || null);
 
-  const scrollViewRef = useRef<RNScrollView>(null); // 👈 Fix typing for scrollViewRef
-
-  // Fetch messages and subscribe when selected user changes
-  useEffect(() => {
-    if (selectedUser?._id) {
-      getMessages(selectedUser._id);
-      subscribeToMessages();
-    }
-    return () => unsubscribeFromMessages();
-  }, [selectedUser?._id]);
+  const scrollViewRef = useRef<RNScrollView>(null);
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -48,6 +35,17 @@ export default function ChatContainer() {
   // Early return if missing user context
   if (!authUser || !selectedUser) {
     return null;
+  }
+
+  if (isMessagesLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <ChatHeader />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -102,6 +100,11 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   messagesContainer: {
     flex: 1,

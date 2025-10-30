@@ -35,10 +35,10 @@
       "expo-web-browser"
     ],
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "8282d554-dab2-476d-b2f2-8402cbe2279f"
-      },
-      "router": {}
+        "projectId": "9f0f3628-cfae-4560-87ab-23728c282a9c"
+      }
     },
     "owner": "emmanard9"
   }

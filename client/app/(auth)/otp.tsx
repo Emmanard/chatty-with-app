@@ -17,202 +17,203 @@ import { useAuthStore } from '../../store/useAuthStore';
 import Toast from 'react-native-toast-message';
 
 export default function OTPScreen() {
-  const { email } = useLocalSearchParams();
-  // Changed from 4 digits to 6 digits
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [timer, setTimer] = useState(60);
-  const [canResend, setCanResend] = useState(false);
-  const inputRefs = useRef<TextInput[]>([]);
-  const { authUser, verifyOTP, resendOTP, isVerifyingOTP, isResendingOTP } =
-    useAuthStore();
+//   const { email } = useLocalSearchParams();
+//   // Changed from 4 digits to 6 digits
+//   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+//   const [timer, setTimer] = useState(60);
+//   const [canResend, setCanResend] = useState(false);
+//   const inputRefs = useRef<TextInput[]>([]);
+// //   const { authUser, verifyOTP, resendOTP, isVerifyingOTP, isResendingOTP } =
+// //     useAuthStore();
 
-  React.useEffect(() => {
-    if (authUser) {
-      router.replace('/(tabs)');
-    }
-  }, [authUser]);
+// //   React.useEffect(() => {
+// //     if (authUser) {
+// //       router.replace('/(tabs)');
+// //     }
+// //   }, [authUser]);
 
-  // Timer for resend functionality
-  useEffect(() => {
-    if (timer > 0) {
-      const interval = setInterval(() => {
-        setTimer((prev) => prev - 1);
-      }, 1000);
-      return () => clearInterval(interval);
-    } else {
-      setCanResend(true);
-    }
-  }, [timer]);
+//   // Timer for resend functionality
+//   useEffect(() => {
+//     if (timer > 0) {
+//       const interval = setInterval(() => {
+//         setTimer((prev) => prev - 1);
+//       }, 1000);
+//       return () => clearInterval(interval);
+//     } else {
+//       setCanResend(true);
+//     }
+//   }, [timer]);
 
-  const handleOtpChange = (value: string, index: number) => {
-    // Only allow numbers
-    if (!/^\d*$/.test(value)) return;
+//   const handleOtpChange = (value: string, index: number) => {
+//     // Only allow numbers
+//     if (!/^\d*$/.test(value)) return;
 
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
+//     const newOtp = [...otp];
+//     newOtp[index] = value;
+//     setOtp(newOtp);
 
-    // Auto-focus next input - changed from index < 3 to index < 5
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
+//     // Auto-focus next input - changed from index < 3 to index < 5
+//     if (value && index < 5) {
+//       inputRefs.current[index + 1]?.focus();
+//     }
+//   };
 
-  const handleKeyPress = (e: any, index: number) => {
-    // Handle backspace
-    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
+//   const handleKeyPress = (e: any, index: number) => {
+//     // Handle backspace
+//     if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+//       inputRefs.current[index - 1]?.focus();
+//     }
+//   };
 
-  const handleVerifyOTP = async () => {
-    const otpCode = otp.join('');
+//   const handleVerifyOTP = async () => {
+//     const otpCode = otp.join('');
 
-    // Changed from length !== 4 to length !== 6
-    if (otpCode.length !== 6) {
-      Toast.show({ type: 'error', text1: 'Please enter complete OTP' });
-      return;
-    }
+//     // Changed from length !== 4 to length !== 6
+//     if (otpCode.length !== 6) {
+//       Toast.show({ type: 'error', text1: 'Please enter complete OTP' });
+//       return;
+//     }
 
-    const success = await verifyOTP({ email: email as string, otp: otpCode });
+//     const success = await verifyOTP({ email: email as string, otp: otpCode });
 
-    if (!success) {
-      // Clear OTP on error - changed to 6 empty strings
-      setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
-    }
-  };
+//     if (!success) {
+//       // Clear OTP on error - changed to 6 empty strings
+//       setOtp(['', '', '', '', '', '']);
+//       inputRefs.current[0]?.focus();
+//     }
+//   };
 
-  const handleResendOTP = async () => {
-    const success = await resendOTP(email as string);
+//   const handleResendOTP = async () => {
+//     // const success = await resendOTP(email as string);
 
-    if (success) {
-      setTimer(60);
-      setCanResend(false);
-      // Changed to 6 empty strings
-      setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
-    }
-  };
+//     if (success) {
+//       setTimer(60);
+//       setCanResend(false);
+//       // Changed to 6 empty strings
+//       setOtp(['', '', '', '', '', '']);
+//       inputRefs.current[0]?.focus();
+//     }
+//   };
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+//   const formatTime = (seconds: number) => {
+//     const mins = Math.floor(seconds / 60);
+//     const secs = seconds % 60;
+//     return `${mins}:${secs.toString().padStart(2, '0')}`;
+//   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.content}>
-            {/* Header */}
-            <View style={styles.header}>
-              <TouchableOpacity
-                onPress={() => router.back()}
-                style={styles.backButton}
-              >
-                <ArrowLeft size={24} color="#374151" />
-              </TouchableOpacity>
-            </View>
+    // <SafeAreaView style={styles.container}>
+    //   <KeyboardAvoidingView
+    //     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    //     style={styles.keyboardView}
+    //   >
+    //     <ScrollView contentContainerStyle={styles.scrollContent}>
+    //       <View style={styles.content}>
+    //         {/* Header */}
+    //         <View style={styles.header}>
+    //           <TouchableOpacity
+    //             onPress={() => router.back()}
+    //             style={styles.backButton}
+    //           >
+    //             <ArrowLeft size={24} color="#374151" />
+    //           </TouchableOpacity>
+    //         </View>
 
-            {/* Logo */}
-            <View style={styles.logoContainer}>
-              <View style={styles.logoWrapper}>
-                <MessageSquare size={24} color="#3b82f6" />
-              </View>
-              <Text style={styles.title}>Verify Your Email</Text>
-              <Text style={styles.subtitle}>
-                We've sent a 6-digit verification code to{'\n'}
-                <Text style={styles.email}>{email}</Text>
-              </Text>
-            </View>
+    //         {/* Logo */}
+    //         <View style={styles.logoContainer}>
+    //           <View style={styles.logoWrapper}>
+    //             <MessageSquare size={24} color="#3b82f6" />
+    //           </View>
+    //           <Text style={styles.title}>Verify Your Email</Text>
+    //           <Text style={styles.subtitle}>
+    //             We've sent a 6-digit verification code to{'\n'}
+    //             <Text style={styles.email}>{email}</Text>
+    //           </Text>
+    //         </View>
 
-            {/* OTP Input */}
-            <View style={styles.otpContainer}>
-              <Text style={styles.otpLabel}>
-                Enter 6-digit verification code
-              </Text>
-              <View style={styles.otpInputContainer}>
-                {otp.map((digit, index) => (
-                  <TextInput
-                    key={index}
-                    ref={(ref) => {
-                      inputRefs.current[index] = ref!;
-                    }}
-                    style={[
-                      styles.otpInput,
-                      digit ? styles.otpInputFilled : {},
-                    ]}
-                    value={digit}
-                    onChangeText={(value) => handleOtpChange(value, index)}
-                    onKeyPress={(e) => handleKeyPress(e, index)}
-                    keyboardType="numeric"
-                    maxLength={1}
-                    textAlign="center"
-                    selectTextOnFocus
-                  />
-                ))}
-              </View>
-            </View>
+    //         {/* OTP Input */}
+    //         <View style={styles.otpContainer}>
+    //           <Text style={styles.otpLabel}>
+    //             Enter 6-digit verification code
+    //           </Text>
+    //           <View style={styles.otpInputContainer}>
+    //             {otp.map((digit, index) => (
+    //               <TextInput
+    //                 key={index}
+    //                 ref={(ref) => {
+    //                   inputRefs.current[index] = ref!;
+    //                 }}
+    //                 style={[
+    //                   styles.otpInput,
+    //                   digit ? styles.otpInputFilled : {},
+    //                 ]}
+    //                 value={digit}
+    //                 onChangeText={(value) => handleOtpChange(value, index)}
+    //                 onKeyPress={(e) => handleKeyPress(e, index)}
+    //                 keyboardType="numeric"
+    //                 maxLength={1}
+    //                 textAlign="center"
+    //                 selectTextOnFocus
+    //               />
+    //             ))}
+    //           </View>
+    //         </View>
 
-            {/* Verify Button */}
-            <TouchableOpacity
-              style={[
-                styles.button,
-                // Changed from length !== 4 to length !== 6
-                (isVerifyingOTP || otp.join('').length !== 6) &&
-                  styles.buttonDisabled,
-              ]}
-              onPress={handleVerifyOTP}
-              // Changed from length !== 4 to length !== 6
-              disabled={isVerifyingOTP || otp.join('').length !== 6}
-            >
-              {isVerifyingOTP ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text style={styles.buttonText}>Verify Code</Text>
-              )}
-            </TouchableOpacity>
+    //         {/* Verify Button */}
+    //         <TouchableOpacity
+    //           style={[
+    //             styles.button,
+    //             // Changed from length !== 4 to length !== 6
+    //             (isVerifyingOTP || otp.join('').length !== 6) &&
+    //               styles.buttonDisabled,
+    //           ]}
+    //           onPress={handleVerifyOTP}
+    //           // Changed from length !== 4 to length !== 6
+    //           disabled={isVerifyingOTP || otp.join('').length !== 6}
+    //         >
+    //           {isVerifyingOTP ? (
+    //             <ActivityIndicator color="white" />
+    //           ) : (
+    //             <Text style={styles.buttonText}>Verify Code</Text>
+    //           )}
+    //         </TouchableOpacity>
 
-            {/* Resend Section */}
-            <View style={styles.resendContainer}>
-              <Text style={styles.resendText}>Didn't receive the code?</Text>
-              {canResend ? (
-                <TouchableOpacity
-                  onPress={handleResendOTP}
-                  disabled={isResendingOTP}
-                  style={styles.resendButton}
-                >
-                  {isResendingOTP ? (
-                    <ActivityIndicator size="small" color="#3b82f6" />
-                  ) : (
-                    <Text style={styles.resendButtonText}>Resend Code</Text>
-                  )}
-                </TouchableOpacity>
-              ) : (
-                <Text style={styles.timerText}>
-                  Resend in {formatTime(timer)}
-                </Text>
-              )}
-            </View>
+    //         {/* Resend Section */}
+    //         <View style={styles.resendContainer}>
+    //           <Text style={styles.resendText}>Didn't receive the code?</Text>
+    //           {canResend ? (
+    //             <TouchableOpacity
+    //               onPress={handleResendOTP}
+    //               disabled={isResendingOTP}
+    //               style={styles.resendButton}
+    //             >
+    //               {isResendingOTP ? (
+    //                 <ActivityIndicator size="small" color="#3b82f6" />
+    //               ) : (
+    //                 <Text style={styles.resendButtonText}>Resend Code</Text>
+    //               )}
+    //             </TouchableOpacity>
+    //           ) : (
+    //             <Text style={styles.timerText}>
+    //               Resend in {formatTime(timer)}
+    //             </Text>
+    //           )}
+    //         </View>
 
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>
-                Wrong email?{' '}
-                <Link href="/(auth)/signup" style={styles.link}>
-                  Go back
-                </Link>
-              </Text>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    //         {/* Footer */}
+    //         <View style={styles.footer}>
+    //           <Text style={styles.footerText}>
+    //             Wrong email?{' '}
+    //             <Link href="/(auth)/signup" style={styles.link}>
+    //               Go back
+    //             </Link>
+    //           </Text>
+    //         </View>
+    //       </View>
+    //     </ScrollView>
+    //   </KeyboardAvoidingView>
+    // </SafeAreaView>
+    <></>
   );
 }
 

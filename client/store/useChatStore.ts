@@ -1,6 +1,4 @@
 import { create } from 'zustand';
-import Toast from 'react-native-toast-message';
-import { axiosInstance } from '../lib/axios';
 import { useAuthStore } from './useAuthStore';
 
 interface User {
@@ -19,133 +17,38 @@ interface Message {
   createdAt: string;
 }
 
-interface RecentConversation {
-  _id: string;
-  user: User;
-  lastMessage: Message;
-  unreadCount: number;
-}
-
 interface ChatStore {
-  messages: Message[];
-  users: User[];
   selectedUser: User | null;
-  recentConversations: RecentConversation[];
-  isUsersLoading: boolean;
-  isMessagesLoading: boolean;
-  getUsers: () => Promise<void>;
-  getMessages: (userId: string) => Promise<void>;
-  getRecentConversations: () => Promise<void>;
-  sendMessage: (messageData: { text?: string; image?: string }) => Promise<void>;
-  subscribeToMessages: () => void;
+  typingUsers: Record<string, boolean>; // userId -> isTyping
+  setSelectedUser: (user: User | null) => void;
+  subscribeToMessages: (onNewMessage: (message: Message) => void) => void;
   unsubscribeFromMessages: () => void;
-  setSelectedUser: (selectedUser: User | null) => void;
+  setTyping: (userId: string, isTyping: boolean) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
-  messages: [],
-  users: [],
   selectedUser: null,
-  recentConversations: [],
-  isUsersLoading: false,
-  isMessagesLoading: false,
+  typingUsers: {},
 
-  getUsers: async () => {
-    set({ isUsersLoading: true });
-    try {
-      const res = await axiosInstance.get('/messages/users');
-      set({ users: res.data });
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: error.response?.data?.message || 'Failed to load users' });
-    } finally {
-      set({ isUsersLoading: false });
-    }
+  setSelectedUser: (user) => {
+    set({ selectedUser: user });
   },
 
-  getRecentConversations: async () => {
-    try {
-      const res = await axiosInstance.get('/messages/conversations');
-      set({ recentConversations: res.data });
-    } catch (error: any) {
-      // Recent conversations endpoint not available
-    }
+  setTyping: (userId, isTyping) => {
+    set((state) => ({
+      typingUsers: {
+        ...state.typingUsers,
+        [userId]: isTyping,
+      },
+    }));
   },
 
-  getMessages: async (userId: string) => {
-    set({ isMessagesLoading: true });
-    try {
-      const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: res.data });
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: error.response?.data?.message || 'Failed to load messages' });
-    } finally {
-      set({ isMessagesLoading: false });
-    }
-  },
-
-  sendMessage: async (messageData: { text?: string; image?: string }) => {
-    const { selectedUser, messages, recentConversations } = get();
-    if (!selectedUser) return;
-
-    try {
-      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      const newMessage: Message = res.data;
-
-      set({ messages: [...messages, newMessage] });
-
-      const updatedConversations = recentConversations.filter(
-        conv => conv.user._id !== selectedUser._id
-      );
-
-      const newConversation: RecentConversation = {
-        _id: selectedUser._id,
-        user: selectedUser,
-        lastMessage: newMessage,
-        unreadCount: 0,
-      };
-
-      set({ recentConversations: [newConversation, ...updatedConversations] });
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: error.response?.data?.message || 'Failed to send message' });
-    }
-  },
-
-  subscribeToMessages: () => {
-    const { selectedUser, recentConversations } = get();
-    if (!selectedUser) return;
-
+  subscribeToMessages: (onNewMessage) => {
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
 
     socket.on('newMessage', (newMessage: Message) => {
-      const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
-      const isMessageSentToSelectedUser = newMessage.receiverId === selectedUser._id;
-
-      if (isMessageSentFromSelectedUser || isMessageSentToSelectedUser) {
-        set({
-          messages: [...get().messages, newMessage],
-        });
-      }
-
-      if (isMessageSentFromSelectedUser) {
-        const senderId = newMessage.senderId;
-        const sender = get().users.find(user => user._id === senderId);
-
-        if (sender) {
-          const updatedConversations = recentConversations.filter(
-            conv => conv.user._id !== senderId
-          );
-
-          const newConversation: RecentConversation = {
-            _id: senderId,
-            user: sender,
-            lastMessage: newMessage,
-            unreadCount: selectedUser._id === senderId ? 0 : 1,
-          };
-
-          set({ recentConversations: [newConversation, ...updatedConversations] });
-        }
-      }
+      onNewMessage(newMessage);
     });
   },
 
@@ -153,20 +56,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const socket = useAuthStore.getState().socket;
     if (socket) {
       socket.off('newMessage');
-    }
-  },
-
-  setSelectedUser: (selectedUser: User | null) => {
-    set({ selectedUser });
-
-    if (selectedUser) {
-      const { recentConversations } = get();
-      const updatedConversations = recentConversations.map(conv =>
-        conv.user._id === selectedUser._id
-          ? { ...conv, unreadCount: 0 }
-          : conv
-      );
-      set({ recentConversations: updatedConversations });
     }
   },
 }));

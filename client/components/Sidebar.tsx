@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,15 +12,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Users, X } from 'lucide-react-native';
 import { useChatStore } from '../store/useChatStore';
 import { useAuthStore } from '../store/useAuthStore';
+import { useUsers } from '../hooks/useChat';
 
-export default function Sidebar({ onUserSelect, onClose }: { onUserSelect?: () => void; onClose?: () => void }) {
-  const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading } = useChatStore();
+export default function Sidebar({ 
+  onUserSelect, 
+  onClose 
+}: { 
+  onUserSelect?: () => void; 
+  onClose?: () => void;
+}) {
+  const { selectedUser, setSelectedUser } = useChatStore();
   const { onlineUsers } = useAuthStore();
+  const { data: users = [], isLoading: isUsersLoading } = useUsers();
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
-
-  useEffect(() => {
-    getUsers();
-  }, [getUsers]);
 
   const filteredUsers = showOnlineOnly
     ? users.filter((user) => onlineUsers.includes(user._id))

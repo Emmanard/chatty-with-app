@@ -14,6 +14,7 @@ import {
 import { Link, router } from 'expo-router';
 import { Eye, EyeOff, Lock, Mail, MessageSquare } from 'lucide-react-native';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useLogin } from '../../hooks/useAuth';
 
 export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
@@ -21,7 +22,8 @@ export default function LoginScreen() {
     email: '',
     password: '',
   });
-  const { login, isLoggingIn, authUser } = useAuthStore();
+  const { authUser } = useAuthStore();
+  const loginMutation = useLogin();
 
   React.useEffect(() => {
     if (authUser) {
@@ -29,8 +31,8 @@ export default function LoginScreen() {
     }
   }, [authUser]);
 
-  const handleSubmit = async () => {
-    await login(formData);
+  const handleSubmit = () => {
+    loginMutation.mutate(formData);
   };
 
   return (
@@ -92,11 +94,11 @@ export default function LoginScreen() {
               </View>
 
               <TouchableOpacity
-                style={[styles.button, isLoggingIn && styles.buttonDisabled]}
+                style={[styles.button, loginMutation.isPending && styles.buttonDisabled]}
                 onPress={handleSubmit}
-                disabled={isLoggingIn}
+                disabled={loginMutation.isPending}
               >
-                {isLoggingIn ? (
+                {loginMutation.isPending ? (
                   <ActivityIndicator color="white" />
                 ) : (
                   <Text style={styles.buttonText}>Sign in</Text>

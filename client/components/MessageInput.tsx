@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Image as ImageIcon, Send, X } from 'lucide-react-native';
 import { useChatStore } from '../store/useChatStore';
+import { useSendMessage } from '../hooks/useChat';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 
@@ -23,7 +24,8 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
   const [text, setText] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const { sendMessage } = useChatStore();
+  const { selectedUser } = useChatStore();
+  const sendMessageMutation = useSendMessage(selectedUser?._id || '');
   const textInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -75,21 +77,22 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
     setImagePreview(null);
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = () => {
     if (!text.trim() && !imagePreview) return;
 
-    try {
-      await sendMessage({
+    sendMessageMutation.mutate(
+      {
         text: text.trim(),
         image: imagePreview ?? undefined,
-      });
-
-      setText('');
-      setImagePreview(null);
-      onMessageSent?.(); // safely call if provided
-    } catch (error) {
-      console.error('Failed to send message:', error);
-    }
+      },
+      {
+        onSuccess: () => {
+          setText('');
+          setImagePreview(null);
+          onMessageSent?.();
+        },
+      }
+    );
   };
 
   return (
@@ -132,16 +135,25 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
               if (!text.trim() && !imagePreview) return;
               handleSendMessage();
             }}
+            editable={!sendMessageMutation.isPending}
           />
 
-          <TouchableOpacity style={styles.imageButton} onPress={handleImagePicker}>
+          <TouchableOpacity 
+            style={styles.imageButton} 
+            onPress={handleImagePicker}
+            disabled={sendMessageMutation.isPending}
+          >
             <ImageIcon size={20} color={imagePreview ? '#10b981' : '#6b7280'} />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.sendButton, (!text.trim() && !imagePreview) && styles.sendButtonDisabled]}
+            style={[
+              styles.sendButton,
+              (!text.trim() && !imagePreview) && styles.sendButtonDisabled,
+              sendMessageMutation.isPending && styles.sendButtonDisabled,
+            ]}
             onPress={handleSendMessage}
-            disabled={!text.trim() && !imagePreview}
+            disabled={(!text.trim() && !imagePreview) || sendMessageMutation.isPending}
           >
             <Send size={20} color="white" />
           </TouchableOpacity>
