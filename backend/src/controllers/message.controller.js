@@ -87,20 +87,56 @@ export const getMessages = async (req, res) => {
   try {
     const { id: userToChatId } = req.params;
     const myId = req.user._id;
+    
+    // Pagination parameters
+    const limit = parseInt(req.query.limit) || 50; // Default 50 messages per page
+    const cursor = req.query.cursor; // Message ID to start from (for cursor-based pagination)
 
-    const messages = await Message.find({
+    // Build the query
+    const query = {
       $or: [
         { senderId: myId, receiverId: userToChatId },
         { senderId: userToChatId, receiverId: myId },
       ],
-    });
+    };
 
-    res.status(200).json(messages);
+    // If cursor exists, only get messages older than the cursor
+    if (cursor) {
+      query._id = { $lt: cursor }; // Get messages with ID less than cursor (older messages)
+    }
+
+    // Fetch messages with limit + 1 to check if there are more
+    const messages = await Message.find(query)
+      .sort({ createdAt: -1 }) // Most recent first
+      .limit(limit + 1);
+
+    // Check if there are more messages
+    const hasMore = messages.length > limit;
+    
+    // Remove the extra message if it exists
+    if (hasMore) {
+      messages.pop();
+    }
+
+    // Get the next cursor (oldest message's ID in current batch)
+    const nextCursor = hasMore && messages.length > 0 
+      ? messages[messages.length - 1]._id.toString() 
+      : null;
+
+    // Reverse messages to show oldest first in the UI
+    const reversedMessages = messages.reverse();
+
+    res.status(200).json({
+      messages: reversedMessages,
+      nextCursor,
+      hasMore,
+    });
   } catch (error) {
     console.log("Error in getMessages controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
 
 export const sendMessage = async (req, res) => {
   try {
@@ -135,3 +171,4 @@ export const sendMessage = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+

@@ -56,11 +56,11 @@ export const signup = async (req, res) => {
   }
 };
 
-// Comment out or remove verifyOTP and resendOTP as they are no longer needed
-/*
-export const verifyOTP = async (req, res) => { ... }
-export const resendOTP = async (req, res) => { ... }
-*/
+
+
+export const verifyOTP = async (req, res) => {  }
+export const resendOTP = async (req, res) => {}
+
 
 export const login = async (req, res) => {
   const { email, password } = req.body;

@@ -40,7 +40,7 @@ export default function RootLayout() {
       defaultOptions: {
         queries: {
           staleTime: 1000 * 60 * 2,
-         cacheTime: 1000 * 60 * 5,
+         gcTime: 1000 * 60 * 3,
           retry: 2,
           refetchOnWindowFocus: false,
           placeholderData: (prev: unknown) => prev,

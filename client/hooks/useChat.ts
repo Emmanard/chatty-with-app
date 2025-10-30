@@ -108,8 +108,8 @@ export const useConversations = () => {
       }
     },
     enabled: !!authUser, // Only fetch when authenticated
-    staleTime: 1000 * 15, // 15 seconds
-    refetchInterval: 1000 * 30, // Refetch every 30 seconds
+    staleTime: 1000 * 5, // 15 seconds
+    refetchInterval: 1000 * 10, // Refetch every 30 seconds
     retry: (failureCount, error: any) => {
       if (error?.response?.status === 401) return false;
       return failureCount < 2;
@@ -148,7 +148,7 @@ export const useMessages = (userId: string | null) => {
       }
     },
     enabled: !!userId && !!authUser, // Only run if userId AND authUser exist
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    staleTime: 1000 * 60 * 1, // 2 minutes
     retry: (failureCount, error: any) => {
       if (error?.response?.status === 401) return false;
       return failureCount < 2;
