@@ -14,7 +14,7 @@ interface MessageProps {
   senderImage?: string;
 }
 
-export default function Message({ message, isOwn, senderImage }: MessageProps) {
+function MessageComponent({ message, isOwn, senderImage }: MessageProps) {
   return (
     <View style={[styles.container, isOwn ? styles.containerSent : styles.containerReceived]}>
       <View style={styles.messageWrapper}>
@@ -50,6 +50,20 @@ export default function Message({ message, isOwn, senderImage }: MessageProps) {
     </View>
   );
 }
+
+// ✅ Memoize to prevent re-rendering unchanged messages
+export default React.memo(
+  MessageComponent,
+  (prevProps, nextProps) => {
+    return (
+      prevProps.message._id === nextProps.message._id &&
+      prevProps.message.text === nextProps.message.text &&
+      prevProps.message.image === nextProps.message.image &&
+      prevProps.isOwn === nextProps.isOwn &&
+      prevProps.senderImage === nextProps.senderImage
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   container: {

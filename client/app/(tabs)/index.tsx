@@ -26,6 +26,11 @@ export default function HomeScreen() {
     return `${Math.floor(diffInMinutes / 1440)}d`;
   };
 
+  // If user is selected, show full-screen chat
+  if (selectedUser) {
+    return <ChatContainer />;
+  }
+
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <View style={styles.container}>
@@ -62,9 +67,7 @@ export default function HomeScreen() {
         </Modal>
 
         {/* Main Content */}
-        {selectedUser ? (
-          <ChatContainer />
-        ) : recentConversations.length > 0 ? (
+        {recentConversations.length > 0 ? (
           <View style={styles.conversationsContainer}>
             <ScrollView style={styles.conversationsList} showsVerticalScrollIndicator={false}>
               {recentConversations.map((conversation) => (

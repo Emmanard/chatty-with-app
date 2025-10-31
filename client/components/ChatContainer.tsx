@@ -2,11 +2,11 @@ import React, { useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  ScrollView as RNScrollView,
+  FlatList,
+  Text,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChatStore } from '../store/useChatStore';
@@ -19,25 +19,40 @@ import Message from './Message';
 export default function ChatContainer() {
   const { selectedUser } = useChatStore();
   const { authUser } = useAuthStore();
-  const { data: messages = [], isLoading: isMessagesLoading } = useMessages(selectedUser?._id || null);
+  
+  const {
+    data,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useMessages(selectedUser?._id || null);
 
-  const scrollViewRef = useRef<RNScrollView>(null);
+  const flatListRef = useRef<FlatList>(null);
 
-  // Scroll to bottom on new message
+  // Flatten pages so oldest messages are first, newest last.
+// We reverse pages because pages[0] is the most-recent page returned by react-query.
+const messages = (data?.pages ?? [])
+  .slice()               
+  .reverse()              
+  .flatMap((page) => page.messages)
+  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+
+  // Scroll to bottom when new messages arrive
   useEffect(() => {
-    if (messages.length > 0 && scrollViewRef.current) {
+    if (messages.length > 0 && flatListRef.current) {
       setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages]);
+  }, [messages.length]);
 
-  // Early return if missing user context
   if (!authUser || !selectedUser) {
     return null;
   }
 
-  if (isMessagesLoading) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <ChatHeader />
@@ -48,43 +63,82 @@ export default function ChatContainer() {
     );
   }
 
+  const handleLoadMore = () => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  };
+
+  const renderMessage = ({ item }: any) => (
+    <Message
+      message={item}
+      isOwn={item.senderId === authUser._id}
+      senderImage={
+        item.senderId === authUser._id
+          ? authUser.profilePic
+          : selectedUser.profilePic
+      }
+    />
+  );
+
+  const ListHeaderComponent = () => {
+    if (isFetchingNextPage) {
+      return (
+        <View style={styles.loadMoreContainer}>
+          <ActivityIndicator size="small" color="#3b82f6" />
+          <Text style={styles.loadMoreText}>Loading older messages...</Text>
+        </View>
+      );
+    }
+
+    if (!hasNextPage && messages.length > 0) {
+      return (
+        <View style={styles.loadMoreContainer}>
+          <Text style={styles.endText}>No more messages</Text>
+        </View>
+      );
+    }
+
+    return null;
+  };
+
+  const ListEmptyComponent = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyText}>No messages yet. Say hi! 👋</Text>
+    </View>
+  );
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={100}
+        keyboardVerticalOffset={0}
       >
         <ChatHeader />
 
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.messagesContainer}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item._id}
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListHeaderComponent={ListHeaderComponent}
+          ListEmptyComponent={ListEmptyComponent}
           keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() => {
-            scrollViewRef.current?.scrollToEnd({ animated: true });
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+            autoscrollToTopThreshold: 10,
           }}
-        >
-          {messages.map((message) => (
-            <Message
-              key={message._id}
-              message={message}
-              isOwn={message.senderId === authUser._id}
-              senderImage={
-                message.senderId === authUser._id
-                  ? authUser.profilePic
-                  : selectedUser.profilePic
-              }
-            />
-          ))}
-        </ScrollView>
+        />
 
         <MessageInput
           onMessageSent={() => {
             setTimeout(() => {
-              scrollViewRef.current?.scrollToEnd({ animated: true });
+              flatListRef.current?.scrollToEnd({ animated: true });
             }, 100);
           }}
         />
@@ -106,11 +160,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  messagesContainer: {
-    flex: 1,
-  },
   messagesContent: {
     padding: 16,
     paddingBottom: 8,
+  },
+  loadMoreContainer: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  loadMoreText: {
+    marginTop: 8,
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  endText: {
+    color: '#9ca3af',
+    fontSize: 14,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyText: {
+    color: '#6b7280',
+    fontSize: 16,
+    textAlign: 'center',
   },
 });

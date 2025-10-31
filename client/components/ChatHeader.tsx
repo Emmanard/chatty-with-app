@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { X } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
 
@@ -31,7 +31,7 @@ export default function ChatHeader() {
         </View>
 
         <TouchableOpacity style={styles.closeButton} onPress={() => setSelectedUser(null)}>
-          <X size={24} color="#6b7280" />
+          <ArrowLeft size={24} color="#6b7280" />
         </TouchableOpacity>
       </View>
     </View>
