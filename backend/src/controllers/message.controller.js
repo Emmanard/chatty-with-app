@@ -100,10 +100,12 @@ export const getMessages = async (req, res) => {
       ],
     };
 
-    // If cursor exists, only get messages older than the cursor
-    if (cursor) {
-      query._id = { $lt: cursor }; // Get messages with ID less than cursor (older messages)
-    }
+   if (cursor) {
+  const cursorMessage = await Message.findById(cursor);
+  if (cursorMessage) {
+    query.createdAt = { $lt: cursorMessage.createdAt };
+  }
+}
 
     // Fetch messages with limit + 1 to check if there are more
     const messages = await Message.find(query)
