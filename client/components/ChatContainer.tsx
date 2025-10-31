@@ -116,24 +116,27 @@ const messages = (data?.pages ?? [])
         keyboardVerticalOffset={0}
       >
         <ChatHeader />
-
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item._id}
-          contentContainerStyle={styles.messagesContent}
-          showsVerticalScrollIndicator={false}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          ListHeaderComponent={ListHeaderComponent}
-          ListEmptyComponent={ListEmptyComponent}
-          keyboardShouldPersistTaps="handled"
-          maintainVisibleContentPosition={{
-            minIndexForVisible: 0,
-            autoscrollToTopThreshold: 10,
-          }}
-        />
+<FlatList
+  ref={flatListRef}
+  data={messages}
+  renderItem={renderMessage}
+  keyExtractor={(item) => item._id}
+  contentContainerStyle={styles.messagesContent}
+  showsVerticalScrollIndicator={false}
+  onEndReached={handleLoadMore}
+  onEndReachedThreshold={0.5}
+  ListHeaderComponent={ListHeaderComponent}
+  ListEmptyComponent={ListEmptyComponent}
+  keyboardShouldPersistTaps="handled"
+  maintainVisibleContentPosition={{
+    minIndexForVisible: 0,
+    autoscrollToTopThreshold: 10,
+  }}
+ 
+  windowSize={5}               
+  maxToRenderPerBatch={20}      
+  removeClippedSubviews={true}  
+/>
 
         <MessageInput
           onMessageSent={() => {
