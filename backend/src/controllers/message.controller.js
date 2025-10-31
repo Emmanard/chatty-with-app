@@ -103,7 +103,7 @@ export const getMessages = async (req, res) => {
    if (cursor) {
   const cursorMessage = await Message.findById(cursor);
   if (cursorMessage) {
-    query.createdAt = { $lt: cursorMessage.createdAt };
+  query.createdAt = { $lt: cursorMessage.createdAt };
   }
 }
 
