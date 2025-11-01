@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import { Image as ImageIcon, Send, X } from 'lucide-react-native';
 import { useChatStore } from '../store/useChatStore';
+import { useGroupStore } from '../store/useGroupStore';
 import { useSendMessage } from '../hooks/useChat';
+import { useSendGroupMessage } from '../hooks/useGroup';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 
@@ -26,9 +28,20 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // 1:1 chat stores/hooks
   const { selectedUser, emitTyping, emitStopTyping } = useChatStore();
   const sendMessageMutation = useSendMessage(selectedUser?._id || '');
+  
+  // Group chat stores/hooks
+  const { selectedGroup, emitGroupTyping, emitStopGroupTyping } = useGroupStore();
+  const sendGroupMessageMutation = useSendGroupMessage(selectedGroup?._id || '');
+  
   const textInputRef = useRef<TextInput>(null);
+
+  // Determine mode
+  const isGroup = !!selectedGroup;
+  const isPending = isGroup ? sendGroupMessageMutation.isPending : sendMessageMutation.isPending;
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (event) => {
@@ -57,12 +70,14 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
   const handleTextChange = (newText: string) => {
     setText(newText);
     
-    if (!selectedUser) return;
-
-    // Emit typing event
+    // Emit typing event based on mode
     if (newText.length > 0 && !isTyping) {
       setIsTyping(true);
-      emitTyping(selectedUser._id);
+      if (isGroup && selectedGroup) {
+        emitGroupTyping(selectedGroup._id);
+      } else if (selectedUser) {
+        emitTyping(selectedUser._id);
+      }
     }
 
     // Clear existing timeout
@@ -74,7 +89,11 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
     typingTimeoutRef.current = setTimeout(() => {
       if (isTyping) {
         setIsTyping(false);
-        emitStopTyping(selectedUser._id);
+        if (isGroup && selectedGroup) {
+          emitStopGroupTyping(selectedGroup._id);
+        } else if (selectedUser) {
+          emitStopTyping(selectedUser._id);
+        }
       }
     }, 500);
   };
@@ -117,36 +136,56 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
     if (!text.trim() && !imagePreview) return;
 
     // Stop typing indicator when sending
-    if (isTyping && selectedUser) {
+    if (isTyping) {
       setIsTyping(false);
-      emitStopTyping(selectedUser._id);
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
+      
+      if (isGroup && selectedGroup) {
+        emitStopGroupTyping(selectedGroup._id);
+      } else if (selectedUser) {
+        emitStopTyping(selectedUser._id);
+      }
     }
 
-    sendMessageMutation.mutate(
-      {
-        text: text.trim(),
-        image: imagePreview ?? undefined,
-      },
-      {
+    const messageData = {
+      text: text.trim(),
+      image: imagePreview ?? undefined,
+    };
+
+    // Send based on mode
+    if (isGroup) {
+      sendGroupMessageMutation.mutate(messageData, {
         onSuccess: () => {
           setText('');
           setImagePreview(null);
           onMessageSent?.();
         },
-      }
-    );
+      });
+    } else {
+      sendMessageMutation.mutate(messageData, {
+        onSuccess: () => {
+          setText('');
+          setImagePreview(null);
+          onMessageSent?.();
+        },
+      });
+    }
   };
 
   const handleBlur = () => {
     // Stop typing when input loses focus
-    if (isTyping && selectedUser) {
+    if (isTyping) {
       setIsTyping(false);
-      emitStopTyping(selectedUser._id);
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
+      }
+      
+      if (isGroup && selectedGroup) {
+        emitStopGroupTyping(selectedGroup._id);
+      } else if (selectedUser) {
+        emitStopTyping(selectedUser._id);
       }
     }
   };
@@ -192,13 +231,13 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
               if (!text.trim() && !imagePreview) return;
               handleSendMessage();
             }}
-            editable={!sendMessageMutation.isPending}
+            editable={!isPending}
           />
 
           <TouchableOpacity 
             style={styles.imageButton} 
             onPress={handleImagePicker}
-            disabled={sendMessageMutation.isPending}
+            disabled={isPending}
           >
             <ImageIcon size={20} color={imagePreview ? '#10b981' : '#6b7280'} />
           </TouchableOpacity>
@@ -207,10 +246,10 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
             style={[
               styles.sendButton,
               (!text.trim() && !imagePreview) && styles.sendButtonDisabled,
-              sendMessageMutation.isPending && styles.sendButtonDisabled,
+              isPending && styles.sendButtonDisabled,
             ]}
             onPress={handleSendMessage}
-            disabled={(!text.trim() && !imagePreview) || sendMessageMutation.isPending}
+            disabled={(!text.trim() && !imagePreview) || isPending}
           >
             <Send size={20} color="white" />
           </TouchableOpacity>

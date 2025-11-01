@@ -9,26 +9,56 @@ interface MessageProps {
     text?: string;
     image?: string;
     createdAt: string;
-    senderId: string;
+    senderId: string | { _id: string; fullName: string; profilePic?: string };
     status?: 'sent' | 'delivered' | 'seen';
+    // Group-specific fields
+    isDeliveredTo?: Array<{ userId: string; deliveredAt: string }>;
+    isSeenBy?: Array<{ userId: string; seenAt: string }>;
   };
   isOwn: boolean;
   senderImage?: string;
+  isGroup?: boolean; // NEW: Flag to indicate group chat
+  senderName?: string; // NEW: For displaying sender name in groups
 }
 
-function MessageComponent({ message, isOwn, senderImage }: MessageProps) {
+function MessageComponent({ message, isOwn, senderImage, isGroup = false, senderName }: MessageProps) {
   const renderStatus = () => {
     if (!isOwn) return null;
 
-    switch (message.status) {
-      case 'seen':
-        return <CheckCheck size={16} color="#10b981" />;
-      case 'delivered':
-        return <CheckCheck size={16} color="#6b7280" />;
-      case 'sent':
-        return <Check size={16} color="#6b7280" />;
-      default:
+    if (isGroup) {
+      // Group chat: Show counts
+      const deliveredCount = message.isDeliveredTo?.length || 0;
+      const seenCount = message.isSeenBy?.length || 0;
+
+      if (seenCount > 0) {
+        return (
+          <View style={styles.groupReceiptContainer}>
+            <CheckCheck size={16} color="#10b981" />
+            <Text style={styles.groupReceiptText}>{seenCount}</Text>
+          </View>
+        );
+      } else if (deliveredCount > 0) {
+        return (
+          <View style={styles.groupReceiptContainer}>
+            <CheckCheck size={16} color="#6b7280" />
+            <Text style={styles.groupReceiptText}>{deliveredCount}</Text>
+          </View>
+        );
+      } else {
         return <Check size={16} color="#9ca3af" />;
+      }
+    } else {
+      // 1:1 chat: Show simple status
+      switch (message.status) {
+        case 'seen':
+          return <CheckCheck size={16} color="#10b981" />;
+        case 'delivered':
+          return <CheckCheck size={16} color="#6b7280" />;
+        case 'sent':
+          return <Check size={16} color="#6b7280" />;
+        default:
+          return <Check size={16} color="#9ca3af" />;
+      }
     }
   };
 
@@ -42,12 +72,18 @@ function MessageComponent({ message, isOwn, senderImage }: MessageProps) {
           style={styles.avatar}
         />
         <View style={styles.messageContent}>
+          {/* Show sender name in groups (only for received messages) */}
+          {isGroup && !isOwn && senderName && (
+            <Text style={styles.senderName}>{senderName}</Text>
+          )}
+          
           <View style={styles.timestampRow}>
             <Text style={styles.timestamp}>
               {formatMessageTime(message.createdAt)}
             </Text>
             {isOwn && <View style={styles.statusIcon}>{renderStatus()}</View>}
           </View>
+          
           <View style={[styles.messageBubble, isOwn ? styles.bubbleSent : styles.bubbleReceived]}>
             {message.image && (
               <Image
@@ -81,7 +117,12 @@ export default React.memo(
       prevProps.message.image === nextProps.message.image &&
       prevProps.message.status === nextProps.message.status &&
       prevProps.isOwn === nextProps.isOwn &&
-      prevProps.senderImage === nextProps.senderImage
+      prevProps.senderImage === nextProps.senderImage &&
+      prevProps.isGroup === nextProps.isGroup &&
+      prevProps.senderName === nextProps.senderName &&
+      // For groups: check receipt arrays
+      (prevProps.message.isDeliveredTo?.length === nextProps.message.isDeliveredTo?.length) &&
+      (prevProps.message.isSeenBy?.length === nextProps.message.isSeenBy?.length)
     );
   }
 );
@@ -112,6 +153,13 @@ const styles = StyleSheet.create({
   messageContent: {
     flex: 1,
   },
+  senderName: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#3b82f6',
+    marginBottom: 2,
+    marginLeft: 4,
+  },
   timestampRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -125,6 +173,16 @@ const styles = StyleSheet.create({
   },
   statusIcon: {
     marginLeft: 2,
+  },
+  groupReceiptContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  groupReceiptText: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontWeight: '500',
   },
   messageBubble: {
     borderRadius: 12,
