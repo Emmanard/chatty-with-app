@@ -5,18 +5,16 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  useColorScheme,
 } from 'react-native';
 import { Image as ImageIcon, Send, X } from 'lucide-react-native';
 import { useChatStore } from '../store/useChatStore';
 import { useGroupStore } from '../store/useGroupStore';
 import { useSendMessage } from '../hooks/useChat';
 import { useSendGroupMessage } from '../hooks/useGroup';
-import * as ImagePicker from 'expo-image-picker';
-import Toast from 'react-native-toast-message';
 
 interface MessageInputProps {
   onMessageSent?: () => void;
@@ -28,186 +26,78 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // 1:1 chat stores/hooks
+
   const { selectedUser, emitTyping, emitStopTyping } = useChatStore();
   const sendMessageMutation = useSendMessage(selectedUser?._id || '');
-  
-  // Group chat stores/hooks
+
   const { selectedGroup, emitGroupTyping, emitStopGroupTyping } = useGroupStore();
   const sendGroupMessageMutation = useSendGroupMessage(selectedGroup?._id || '');
-  
+
   const textInputRef = useRef<TextInput>(null);
 
-  // Determine mode
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const isGroup = !!selectedGroup;
   const isPending = isGroup ? sendGroupMessageMutation.isPending : sendMessageMutation.isPending;
 
+  // Keyboard listeners
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (event) => {
-      setKeyboardHeight(event.endCoordinates.height);
-    });
-
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      keyboardDidShowListener?.remove();
-      keyboardDidHideListener?.remove();
-    };
+    const showListener = Keyboard.addListener('keyboardDidShow', e => setKeyboardHeight(e.endCoordinates.height));
+    const hideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => { showListener.remove(); hideListener.remove(); };
   }, []);
 
-  // Cleanup typing timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => () => { if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current); }, []);
 
   const handleTextChange = (newText: string) => {
     setText(newText);
-    
-    // Emit typing event based on mode
-    if (newText.length > 0 && !isTyping) {
+    if (newText.length && !isTyping) {
       setIsTyping(true);
-      if (isGroup && selectedGroup) {
-        emitGroupTyping(selectedGroup._id);
-      } else if (selectedUser) {
-        emitTyping(selectedUser._id);
-      }
+      if (isGroup && selectedGroup) emitGroupTyping(selectedGroup._id);
+      else if (selectedUser) emitTyping(selectedUser._id);
     }
 
-    // Clear existing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    // Set new timeout - stop typing after 500ms of inactivity
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      if (isTyping) {
-        setIsTyping(false);
-        if (isGroup && selectedGroup) {
-          emitStopGroupTyping(selectedGroup._id);
-        } else if (selectedUser) {
-          emitStopTyping(selectedUser._id);
-        }
-      }
+      setIsTyping(false);
+      if (isGroup && selectedGroup) emitStopGroupTyping(selectedGroup._id);
+      else if (selectedUser) emitStopTyping(selectedUser._id);
     }, 500);
-  };
-
-  const handleImagePicker = async () => {
-    try {
-      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-      const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (cameraStatus !== 'granted' || mediaStatus !== 'granted') {
-        Alert.alert(
-          'Permission Denied',
-          'We need both camera and photo library permissions to let you upload an image.'
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.7,
-        base64: true,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-        setImagePreview(base64Image);
-      }
-    } catch (error) {
-      Toast.show({ type: 'error', text1: 'Image selection failed' });
-      console.error('Image picker error:', error);
-    }
-  };
-
-  const removeImage = () => {
-    setImagePreview(null);
   };
 
   const handleSendMessage = () => {
     if (!text.trim() && !imagePreview) return;
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
-    // Stop typing indicator when sending
-    if (isTyping) {
-      setIsTyping(false);
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      
-      if (isGroup && selectedGroup) {
-        emitStopGroupTyping(selectedGroup._id);
-      } else if (selectedUser) {
-        emitStopTyping(selectedUser._id);
-      }
-    }
-
-    const messageData = {
-      text: text.trim(),
-      image: imagePreview ?? undefined,
-    };
-
-    // Send based on mode
+    const messageData = { text: text.trim(), image: imagePreview ?? undefined };
     if (isGroup) {
       sendGroupMessageMutation.mutate(messageData, {
-        onSuccess: () => {
-          setText('');
-          setImagePreview(null);
-          onMessageSent?.();
-        },
+        onSuccess: () => { setText(''); setImagePreview(null); onMessageSent?.(); },
       });
     } else {
       sendMessageMutation.mutate(messageData, {
-        onSuccess: () => {
-          setText('');
-          setImagePreview(null);
-          onMessageSent?.();
-        },
+        onSuccess: () => { setText(''); setImagePreview(null); onMessageSent?.(); },
       });
     }
   };
 
   const handleBlur = () => {
-    // Stop typing when input loses focus
     if (isTyping) {
       setIsTyping(false);
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      
-      if (isGroup && selectedGroup) {
-        emitStopGroupTyping(selectedGroup._id);
-      } else if (selectedUser) {
-        emitStopTyping(selectedUser._id);
-      }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (isGroup && selectedGroup) emitStopGroupTyping(selectedGroup._id);
+      else if (selectedUser) emitStopTyping(selectedUser._id);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-    >
-      <View
-        style={[
-          styles.container,
-          Platform.OS === 'android' && keyboardHeight > 0 && {
-            marginBottom: 0,
-          },
-        ]}
-      >
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={[styles.container, { backgroundColor: isDark ? '#1f1f1f' : '#f3f4f6' }]}>
         {imagePreview && (
           <View style={styles.imagePreviewContainer}>
             <View style={styles.imagePreview}>
               <Image source={{ uri: imagePreview }} style={styles.previewImage} />
-              <TouchableOpacity style={styles.removeImageButton} onPress={removeImage}>
+              <TouchableOpacity style={styles.removeImageButton} onPress={() => setImagePreview(null)}>
                 <X size={16} color="white" />
               </TouchableOpacity>
             </View>
@@ -217,39 +107,30 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
         <View style={styles.inputContainer}>
           <TextInput
             ref={textInputRef}
-            style={styles.textInput}
+            style={[
+              styles.textInput,
+              { backgroundColor: isDark ? '#374151' : '#fff', color: isDark ? '#fff' : '#111827' },
+            ]}
             placeholder="Type a message..."
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={isDark ? '#9ca3af' : '#6b7280'}
             value={text}
             onChangeText={handleTextChange}
             onBlur={handleBlur}
             multiline
             maxLength={1000}
-            textAlignVertical="top"
-            blurOnSubmit={false}
-            onSubmitEditing={() => {
-              if (!text.trim() && !imagePreview) return;
-              handleSendMessage();
-            }}
-            editable={!isPending}
           />
 
-          <TouchableOpacity 
-            style={styles.imageButton} 
-            onPress={handleImagePicker}
-            disabled={isPending}
-          >
+          <TouchableOpacity style={[styles.iconButton, { backgroundColor: isDark ? '#374151' : '#f3f4f6' }]} onPress={() => {}}>
             <ImageIcon size={20} color={imagePreview ? '#10b981' : '#6b7280'} />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!text.trim() && !imagePreview) && styles.sendButtonDisabled,
-              isPending && styles.sendButtonDisabled,
+              (isPending || (!text.trim() && !imagePreview)) && styles.sendButtonDisabled,
             ]}
             onPress={handleSendMessage}
-            disabled={(!text.trim() && !imagePreview) || isPending}
+            disabled={isPending || (!text.trim() && !imagePreview)}
           >
             <Send size={20} color="white" />
           </TouchableOpacity>
@@ -260,75 +141,14 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 16 : 16,
-  },
-  imagePreviewContainer: {
-    marginBottom: 12,
-  },
-  imagePreview: {
-    position: 'relative',
-    alignSelf: 'flex-start',
-  },
-  previewImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 20,
-    height: 20,
-    backgroundColor: '#ef4444',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  textInput: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    maxHeight: 100,
-    color: '#111827',
-    lineHeight: 20,
-  },
-  imageButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 22,
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    backgroundColor: '#3b82f6',
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
+  container: { borderTopWidth: 1, borderTopColor: '#d1d5db', padding: 12 },
+  imagePreviewContainer: { marginBottom: 8 },
+  imagePreview: { position: 'relative', alignSelf: 'flex-start' },
+  previewImage: { width: 80, height: 80, borderRadius: 8, borderWidth: 1, borderColor: '#d1d5db' },
+  removeImageButton: { position: 'absolute', top: -6, right: -6, width: 20, height: 20, backgroundColor: '#ef4444', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  inputContainer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  textInput: { flex: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 16, maxHeight: 100, borderWidth: 1, borderColor: '#d1d5db', lineHeight: 20 },
+  iconButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#d1d5db' },
+  sendButton: { width: 44, height: 44, backgroundColor: '#3b82f6', borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  sendButtonDisabled: { opacity: 0.5 },
 });

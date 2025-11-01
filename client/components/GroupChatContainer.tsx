@@ -1,5 +1,15 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, FlatList, Text, AppState } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  FlatList,
+  Text,
+  AppState,
+  useColorScheme,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGroupStore } from '../store/useGroupStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -11,16 +21,19 @@ import Message from './Message';
 export default function GroupChatContainer() {
   const { selectedGroup } = useGroupStore();
   const { authUser } = useAuthStore();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useGroupMessages(selectedGroup?._id || null);
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useGroupMessages(
+    selectedGroup?._id || null
+  );
 
   const flatListRef = useRef<FlatList>(null);
 
-  // Flatten messages
   const messages = (data?.pages ?? [])
     .slice()
     .reverse()
-    .flatMap(page => page.messages)
+    .flatMap((page) => page.messages)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   // Scroll to bottom on new messages
@@ -47,46 +60,60 @@ export default function GroupChatContainer() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const keyExtractor = useCallback((item: any) => item._id, []);
-
   const getItemLayout = useCallback((_item: any, index: number) => ({ length: 100, offset: 100 * index, index }), []);
 
-  const renderMessage = useCallback(({ item }: any) => {
-    if (!authUser || !selectedGroup) return null;
+  const renderMessage = useCallback(
+    ({ item }: any) => {
+      if (!authUser || !selectedGroup) return null;
 
-    const isOwn = typeof item.senderId === 'string'
-      ? item.senderId === authUser._id
-      : item.senderId._id === authUser._id;
+      const isOwn =
+        typeof item.senderId === 'string'
+          ? item.senderId === authUser._id
+          : item.senderId._id === authUser._id;
 
-    const sender = typeof item.senderId === 'string'
-      ? selectedGroup.participantIds.find(p => p._id === item.senderId)
-      : item.senderId;
+      const sender =
+        typeof item.senderId === 'string'
+          ? selectedGroup.participantIds.find((p) => p._id === item.senderId)
+          : item.senderId;
 
-    const senderName = sender?.fullName || 'Unknown';
-    const senderImage = sender?.profilePic || 'https://images.pexels.com/photos/771742/pexels-photo-771742.jpeg';
+      const senderName = sender?.fullName || 'Unknown';
+      const senderImage =
+        sender?.profilePic || 'https://images.pexels.com/photos/771742/pexels-photo-771742.jpeg';
 
-    return <Message message={item} isOwn={isOwn} senderImage={senderImage} isGroup senderName={senderName} />;
-  }, [authUser, selectedGroup]);
+      return <Message message={item} isOwn={isOwn} senderImage={senderImage} isGroup senderName={senderName} />;
+    },
+    [authUser, selectedGroup]
+  );
 
   const ListHeaderComponent = useCallback(() => {
-    if (isFetchingNextPage) return (
-      <View style={styles.loadMoreContainer}>
-        <ActivityIndicator size="small" color="#3b82f6" />
-        <Text style={styles.loadMoreText}>Loading older messages...</Text>
-      </View>
-    );
-    if (!hasNextPage && messages.length > 0) return (
-      <View style={styles.loadMoreContainer}>
-        <Text style={styles.endText}>No more messages</Text>
-      </View>
-    );
+    if (isFetchingNextPage) {
+      return (
+        <View style={styles.loadMoreContainer}>
+          <ActivityIndicator size="small" color={isDark ? '#0ea5e9' : '#3b82f6'} />
+          <Text style={[styles.loadMoreText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Loading older messages...</Text>
+        </View>
+      );
+    }
+    if (!hasNextPage && messages.length > 0) {
+      return (
+        <View style={styles.loadMoreContainer}>
+          <Text style={[styles.endText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>No more messages</Text>
+        </View>
+      );
+    }
     return null;
-  }, [isFetchingNextPage, hasNextPage, messages.length]);
+  }, [isFetchingNextPage, hasNextPage, messages.length, isDark]);
 
-  const ListEmptyComponent = useCallback(() => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyText}>No messages yet. Start the conversation! 👋</Text>
-    </View>
-  ), []);
+  const ListEmptyComponent = useCallback(
+    () => (
+      <View style={styles.emptyContainer}>
+        <Text style={[styles.emptyText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
+          No messages yet. Start the conversation! 👋
+        </Text>
+      </View>
+    ),
+    [isDark]
+  );
 
   const handleMessageSent = useCallback(() => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -94,16 +121,20 @@ export default function GroupChatContainer() {
 
   if (!authUser || !selectedGroup) return null;
 
-  if (isLoading) return (
-    <SafeAreaView style={styles.safeArea}>
-      <ChatHeader />
-      <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#3b82f6" /></View>
-    </SafeAreaView>
-  );
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? '#121212' : '#fff' }]}>
+        <ChatHeader />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={isDark ? '#0ea5e9' : '#3b82f6'} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? '#121212' : '#fff' }]} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ChatHeader />
         <FlatList
           ref={flatListRef}
@@ -111,7 +142,7 @@ export default function GroupChatContainer() {
           renderItem={renderMessage}
           keyExtractor={keyExtractor}
           getItemLayout={getItemLayout}
-          contentContainerStyle={styles.messagesContent}
+          contentContainerStyle={[styles.messagesContent, { paddingBottom: 8 }]}
           showsVerticalScrollIndicator={false}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
@@ -132,13 +163,13 @@ export default function GroupChatContainer() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: 'white' },
+  safeArea: { flex: 1 },
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  messagesContent: { padding: 16, paddingBottom: 8 },
+  messagesContent: { padding: 16 },
   loadMoreContainer: { padding: 16, alignItems: 'center' },
-  loadMoreText: { marginTop: 8, color: '#6b7280', fontSize: 14 },
-  endText: { color: '#9ca3af', fontSize: 14 },
+  loadMoreText: { marginTop: 8, fontSize: 14 },
+  endText: { fontSize: 14 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  emptyText: { color: '#6b7280', fontSize: 16, textAlign: 'center' },
+  emptyText: { fontSize: 16, textAlign: 'center' },
 });
