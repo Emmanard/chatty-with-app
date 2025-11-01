@@ -7,6 +7,7 @@ import path from "path";
 import { connectDB } from "./lib/db.js";
 import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
+import groupRoutes from "./routes/group.route.js";
 import { app, server } from "./lib/socket.js";
 
 // Load environment variables first
@@ -32,6 +33,7 @@ app.use(
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/groups", groupRoutes);
 
 // Health check endpoint (optional but useful)
 app.get("/api/health", (req, res) => {
