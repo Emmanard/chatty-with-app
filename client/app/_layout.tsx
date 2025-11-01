@@ -1,25 +1,71 @@
-import { useEffect } from 'react';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
-import { useFrameworkReady } from '../hooks/useFrameworkReady';
-import { useAuthStore } from '../store/useAuthStore';
-import Toast from 'react-native-toast-message';
+import { useState } from "react";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import {
+  StyleSheet,
+  View,
+  ActivityIndicator,
+  Platform,
+  ToastAndroid,
+  Alert,
+} from "react-native";
+import Toast from "react-native-toast-message";
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryCache,
+} from "@tanstack/react-query";
+import { useFrameworkReady } from "../hooks/useFrameworkReady";
+import { useCheckAuth } from "../hooks/useAuth";
 
 export default function RootLayout() {
+  const [queryClient] = useState(() => {
+    const queryCache = new QueryCache({
+      onError: (error: unknown) => {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Something went wrong while fetching data.";
+
+        if (Platform.OS === "android") {
+          ToastAndroid.show(message, ToastAndroid.SHORT);
+        } else {
+          Alert.alert("Error", message);
+        }
+      },
+    });
+
+    return new QueryClient({
+      queryCache,
+      defaultOptions: {
+        queries: {
+          staleTime: 1000 * 60 * 2,
+         gcTime: 1000 * 60 * 3,
+          retry: 2,
+          refetchOnWindowFocus: false,
+          placeholderData: (prev: unknown) => prev,
+        },
+      },
+    });
+  });
+
   useFrameworkReady();
-  const { checkAuth, isCheckingAuth } = useAuthStore();
 
-  useEffect(() => {
-    // Only check auth once when component mounts
-    checkAuth();
-  }, []); // Empty dependency array to run only once
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
+    </QueryClientProvider>
+  );
+}
 
-  // Show loading screen while checking auth
+function AppContent() {
+  // Now we can use React Query hooks because we're inside QueryClientProvider
+  const { isLoading: isCheckingAuth } = useCheckAuth();
+
   if (isCheckingAuth) {
     return (
       <View style={styles.container}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <View style={styles.loader}>
           <ActivityIndicator size="large" color="#3b82f6" />
         </View>
       </View>
@@ -29,8 +75,8 @@ export default function RootLayout() {
   return (
     <View style={styles.container}>
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />
@@ -42,6 +88,11 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: "#f9fafb",
+  },
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

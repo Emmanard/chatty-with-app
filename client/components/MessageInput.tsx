@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Image as ImageIcon, Send, X } from 'lucide-react-native';
 import { useChatStore } from '../store/useChatStore';
+import { useSendMessage } from '../hooks/useChat';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 
@@ -23,7 +24,10 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
   const [text, setText] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const { sendMessage } = useChatStore();
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { selectedUser, emitTyping, emitStopTyping } = useChatStore();
+  const sendMessageMutation = useSendMessage(selectedUser?._id || '');
   const textInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -40,6 +44,40 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
       keyboardDidHideListener?.remove();
     };
   }, []);
+
+  // Cleanup typing timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleTextChange = (newText: string) => {
+    setText(newText);
+    
+    if (!selectedUser) return;
+
+    // Emit typing event
+    if (newText.length > 0 && !isTyping) {
+      setIsTyping(true);
+      emitTyping(selectedUser._id);
+    }
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set new timeout - stop typing after 500ms of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isTyping) {
+        setIsTyping(false);
+        emitStopTyping(selectedUser._id);
+      }
+    }, 500);
+  };
 
   const handleImagePicker = async () => {
     try {
@@ -75,20 +113,41 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
     setImagePreview(null);
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = () => {
     if (!text.trim() && !imagePreview) return;
 
-    try {
-      await sendMessage({
+    // Stop typing indicator when sending
+    if (isTyping && selectedUser) {
+      setIsTyping(false);
+      emitStopTyping(selectedUser._id);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    }
+
+    sendMessageMutation.mutate(
+      {
         text: text.trim(),
         image: imagePreview ?? undefined,
-      });
+      },
+      {
+        onSuccess: () => {
+          setText('');
+          setImagePreview(null);
+          onMessageSent?.();
+        },
+      }
+    );
+  };
 
-      setText('');
-      setImagePreview(null);
-      onMessageSent?.(); // safely call if provided
-    } catch (error) {
-      console.error('Failed to send message:', error);
+  const handleBlur = () => {
+    // Stop typing when input loses focus
+    if (isTyping && selectedUser) {
+      setIsTyping(false);
+      emitStopTyping(selectedUser._id);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
     }
   };
 
@@ -123,7 +182,8 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
             placeholder="Type a message..."
             placeholderTextColor="#9ca3af"
             value={text}
-            onChangeText={setText}
+            onChangeText={handleTextChange}
+            onBlur={handleBlur}
             multiline
             maxLength={1000}
             textAlignVertical="top"
@@ -132,16 +192,25 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
               if (!text.trim() && !imagePreview) return;
               handleSendMessage();
             }}
+            editable={!sendMessageMutation.isPending}
           />
 
-          <TouchableOpacity style={styles.imageButton} onPress={handleImagePicker}>
+          <TouchableOpacity 
+            style={styles.imageButton} 
+            onPress={handleImagePicker}
+            disabled={sendMessageMutation.isPending}
+          >
             <ImageIcon size={20} color={imagePreview ? '#10b981' : '#6b7280'} />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.sendButton, (!text.trim() && !imagePreview) && styles.sendButtonDisabled]}
+            style={[
+              styles.sendButton,
+              (!text.trim() && !imagePreview) && styles.sendButtonDisabled,
+              sendMessageMutation.isPending && styles.sendButtonDisabled,
+            ]}
             onPress={handleSendMessage}
-            disabled={!text.trim() && !imagePreview}
+            disabled={(!text.trim() && !imagePreview) || sendMessageMutation.isPending}
           >
             <Send size={20} color="white" />
           </TouchableOpacity>

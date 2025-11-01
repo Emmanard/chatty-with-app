@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
+import { Check, CheckCheck } from 'lucide-react-native';
 import { formatMessageTime } from '../lib/utils';
 
 interface MessageProps {
@@ -9,12 +10,28 @@ interface MessageProps {
     image?: string;
     createdAt: string;
     senderId: string;
+    status?: 'sent' | 'delivered' | 'seen';
   };
   isOwn: boolean;
   senderImage?: string;
 }
 
-export default function Message({ message, isOwn, senderImage }: MessageProps) {
+function MessageComponent({ message, isOwn, senderImage }: MessageProps) {
+  const renderStatus = () => {
+    if (!isOwn) return null;
+
+    switch (message.status) {
+      case 'seen':
+        return <CheckCheck size={16} color="#10b981" />;
+      case 'delivered':
+        return <CheckCheck size={16} color="#6b7280" />;
+      case 'sent':
+        return <Check size={16} color="#6b7280" />;
+      default:
+        return <Check size={16} color="#9ca3af" />;
+    }
+  };
+
   return (
     <View style={[styles.container, isOwn ? styles.containerSent : styles.containerReceived]}>
       <View style={styles.messageWrapper}>
@@ -25,9 +42,12 @@ export default function Message({ message, isOwn, senderImage }: MessageProps) {
           style={styles.avatar}
         />
         <View style={styles.messageContent}>
-          <Text style={styles.timestamp}>
-            {formatMessageTime(message.createdAt)}
-          </Text>
+          <View style={styles.timestampRow}>
+            <Text style={styles.timestamp}>
+              {formatMessageTime(message.createdAt)}
+            </Text>
+            {isOwn && <View style={styles.statusIcon}>{renderStatus()}</View>}
+          </View>
           <View style={[styles.messageBubble, isOwn ? styles.bubbleSent : styles.bubbleReceived]}>
             {message.image && (
               <Image
@@ -50,6 +70,21 @@ export default function Message({ message, isOwn, senderImage }: MessageProps) {
     </View>
   );
 }
+
+// ✅ Memoize to prevent re-rendering unchanged messages
+export default React.memo(
+  MessageComponent,
+  (prevProps, nextProps) => {
+    return (
+      prevProps.message._id === nextProps.message._id &&
+      prevProps.message.text === nextProps.message.text &&
+      prevProps.message.image === nextProps.message.image &&
+      prevProps.message.status === nextProps.message.status &&
+      prevProps.isOwn === nextProps.isOwn &&
+      prevProps.senderImage === nextProps.senderImage
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   container: {
@@ -77,11 +112,19 @@ const styles = StyleSheet.create({
   messageContent: {
     flex: 1,
   },
+  timestampRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    marginLeft: 4,
+    gap: 4,
+  },
   timestamp: {
     fontSize: 12,
     color: '#6b7280',
-    marginBottom: 4,
-    marginLeft: 4,
+  },
+  statusIcon: {
+    marginLeft: 2,
   },
   messageBubble: {
     borderRadius: 12,

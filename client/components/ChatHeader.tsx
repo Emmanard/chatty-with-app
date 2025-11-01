@@ -1,14 +1,21 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { X } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
 
 export default function ChatHeader() {
-  const { selectedUser, setSelectedUser } = useChatStore();
+  const { selectedUser, setSelectedUser, typingUsers, subscribeToTyping, unsubscribeFromTyping } = useChatStore();
   const { onlineUsers } = useAuthStore();
 
   const isUserOnline = !!selectedUser?._id && onlineUsers.includes(String(selectedUser._id));
+  const isTyping = selectedUser?._id ? typingUsers[selectedUser._id] : false;
+
+  // Subscribe to typing events
+  useEffect(() => {
+    subscribeToTyping();
+    return () => unsubscribeFromTyping();
+  }, [subscribeToTyping, unsubscribeFromTyping]);
 
   return (
     <View style={styles.container}>
@@ -24,14 +31,18 @@ export default function ChatHeader() {
           />
           <View>
             <Text style={styles.userName}>{selectedUser?.fullName}</Text>
-            <Text style={[styles.userStatus, isUserOnline && styles.onlineStatus]}>
-              {isUserOnline ? 'Online' : 'Offline'}
-            </Text>
+            {isTyping ? (
+              <Text style={styles.typingText}>typing...</Text>
+            ) : (
+              <Text style={[styles.userStatus, isUserOnline && styles.onlineStatus]}>
+                {isUserOnline ? 'Online' : 'Offline'}
+              </Text>
+            )}
           </View>
         </View>
 
         <TouchableOpacity style={styles.closeButton} onPress={() => setSelectedUser(null)}>
-          <X size={24} color="#6b7280" />
+          <ArrowLeft size={24} color="#6b7280" />
         </TouchableOpacity>
       </View>
     </View>
@@ -72,6 +83,11 @@ const styles = StyleSheet.create({
   },
   onlineStatus: {
     color: '#10b981',
+  },
+  typingText: {
+    fontSize: 14,
+    color: '#3b82f6',
+    fontStyle: 'italic',
   },
   closeButton: {
     padding: 4,

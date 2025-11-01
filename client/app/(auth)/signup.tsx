@@ -15,6 +15,7 @@ import { Link, router } from 'expo-router';
 import { Eye, EyeOff, Lock, Mail, MessageSquare, User } from 'lucide-react-native';
 import { useAuthStore } from '../../store/useAuthStore';
 import Toast from 'react-native-toast-message';
+import { useSignup } from '../../hooks/useAuth';
 
 export default function SignupScreen() {
   const [showPassword, setShowPassword] = useState(false);
@@ -23,7 +24,8 @@ export default function SignupScreen() {
     email: '',
     password: '',
   });
-  const { signup, isSigningUp, authUser } = useAuthStore();
+  const { authUser } = useAuthStore();
+  const signupMutation = useSignup();
 
   React.useEffect(() => {
     if (authUser) {
@@ -55,9 +57,9 @@ export default function SignupScreen() {
     return true;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (validateForm()) {
-      await signup(formData);
+      signupMutation.mutate(formData);
     }
   };
 
@@ -133,11 +135,11 @@ export default function SignupScreen() {
               </View>
 
               <TouchableOpacity
-                style={[styles.button, isSigningUp && styles.buttonDisabled]}
+                style={[styles.button, signupMutation.isPending && styles.buttonDisabled]}
                 onPress={handleSubmit}
-                disabled={isSigningUp}
+                disabled={signupMutation.isPending}
               >
-                {isSigningUp ? (
+                {signupMutation.isPending ? (
                   <ActivityIndicator color="white" />
                 ) : (
                   <Text style={styles.buttonText}>Create Account</Text>

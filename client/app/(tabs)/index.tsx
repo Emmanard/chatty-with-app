@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { View, StyleSheet, TouchableOpacity, Modal, Text, ScrollView, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useChatStore } from "../../store/useChatStore";
@@ -7,15 +7,13 @@ import NoChatSelected from "../../components/NoChatSelected";
 import ChatContainer from "../../components/ChatContainer";
 import { Plus, MessageCircle } from "lucide-react-native";
 import { useAuthStore } from "../../store/useAuthStore";
+import { useConversations } from "../../hooks/useChat";
 
 export default function HomeScreen() {
-  const { selectedUser, setSelectedUser, recentConversations, getRecentConversations } = useChatStore();
+  const { selectedUser, setSelectedUser } = useChatStore();
   const { onlineUsers } = useAuthStore();
   const [addPeopleVisible, setAddPeopleVisible] = useState(false);
-
-  useEffect(() => {
-    getRecentConversations();
-  }, [getRecentConversations]);
+  const { data: recentConversations = [] } = useConversations();
 
   const formatLastMessageTime = (timestamp: string | number | Date): string => {
     const now = new Date();
@@ -27,6 +25,11 @@ export default function HomeScreen() {
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h`;
     return `${Math.floor(diffInMinutes / 1440)}d`;
   };
+
+  // If user is selected, show full-screen chat
+  if (selectedUser) {
+    return <ChatContainer />;
+  }
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
@@ -44,29 +47,27 @@ export default function HomeScreen() {
         </View>
 
         {/* Add People Modal */}
-<Modal
-  animationType="slide"
-  transparent={true}
-  visible={addPeopleVisible}
-  onRequestClose={() => setAddPeopleVisible(false)}
->
-  <View style={styles.modalOverlay}>
-    <View style={styles.sidebarContainer}>
-      <Sidebar 
-        onUserSelect={() => setAddPeopleVisible(false)} 
-        onClose={() => {
-          console.log("Closing sidebar...");
-          setAddPeopleVisible(false);
-        }}
-      />
-    </View>
-  </View>
-</Modal>
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={addPeopleVisible}
+          onRequestClose={() => setAddPeopleVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.sidebarContainer}>
+              <Sidebar 
+                onUserSelect={() => setAddPeopleVisible(false)} 
+                onClose={() => {
+                  console.log("Closing sidebar...");
+                  setAddPeopleVisible(false);
+                }}
+              />
+            </View>
+          </View>
+        </Modal>
 
         {/* Main Content */}
-        {selectedUser ? (
-          <ChatContainer />
-        ) : recentConversations.length > 0 ? (
+        {recentConversations.length > 0 ? (
           <View style={styles.conversationsContainer}>
             <ScrollView style={styles.conversationsList} showsVerticalScrollIndicator={false}>
               {recentConversations.map((conversation) => (

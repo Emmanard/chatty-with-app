@@ -1,6 +1,4 @@
 import { create } from 'zustand';
-import Toast from 'react-native-toast-message';
-import { axiosInstance } from '../lib/axios';
 import { useAuthStore } from './useAuthStore';
 
 interface User {
@@ -17,134 +15,100 @@ interface Message {
   text?: string;
   image?: string;
   createdAt: string;
-}
-
-interface RecentConversation {
-  _id: string;
-  user: User;
-  lastMessage: Message;
-  unreadCount: number;
+  isDeliveredTo?: string[];
+  isSeenBy?: string[];
+  status?: 'sent' | 'delivered' | 'seen';
 }
 
 interface ChatStore {
-  messages: Message[];
-  users: User[];
   selectedUser: User | null;
-  recentConversations: RecentConversation[];
-  isUsersLoading: boolean;
-  isMessagesLoading: boolean;
-  getUsers: () => Promise<void>;
-  getMessages: (userId: string) => Promise<void>;
-  getRecentConversations: () => Promise<void>;
-  sendMessage: (messageData: { text?: string; image?: string }) => Promise<void>;
-  subscribeToMessages: () => void;
+  typingUsers: Record<string, boolean>;
+  setSelectedUser: (user: User | null) => void;
+  subscribeToMessages: (onNewMessage: (message: Message) => void) => void;
   unsubscribeFromMessages: () => void;
-  setSelectedUser: (selectedUser: User | null) => void;
+  setTyping: (userId: string, isTyping: boolean) => void;
+  subscribeToTyping: () => void;
+  unsubscribeFromTyping: () => void;
+  emitTyping: (receiverId: string) => void;
+  emitStopTyping: (receiverId: string) => void;
+  
+  // NEW: Receipt methods
+  subscribeToReceipts: (
+    onDelivered: (data: any) => void,
+    onSeen: (data: any) => void
+  ) => void;
+  unsubscribeFromReceipts: () => void;
+  markAsSeen: (conversationId: string, userId: string) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
-  messages: [],
-  users: [],
   selectedUser: null,
-  recentConversations: [],
-  isUsersLoading: false,
-  isMessagesLoading: false,
+  typingUsers: {},
 
-  getUsers: async () => {
-    set({ isUsersLoading: true });
-    try {
-      const res = await axiosInstance.get('/messages/users');
-      set({ users: res.data });
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: error.response?.data?.message || 'Failed to load users' });
-    } finally {
-      set({ isUsersLoading: false });
+  setSelectedUser: (user) => {
+    const socket = useAuthStore.getState().socket;
+    const authUser = useAuthStore.getState().authUser;
+    
+    // Mark previous conversation messages as seen when switching
+    const previousUser = get().selectedUser;
+    if (previousUser && authUser && socket) {
+      const conversationId = [authUser._id, previousUser._id].sort().join('_');
+      socket.emit('mark_as_seen', {
+        conversationId,
+        userId: authUser._id,
+      });
+    }
+
+    set({ selectedUser: user });
+
+    // Mark new conversation messages as seen
+    if (user && authUser && socket) {
+      const conversationId = [authUser._id, user._id].sort().join('_');
+      socket.emit('mark_as_seen', {
+        conversationId,
+        userId: authUser._id,
+      });
     }
   },
 
-  getRecentConversations: async () => {
-    try {
-      const res = await axiosInstance.get('/messages/conversations');
-      set({ recentConversations: res.data });
-    } catch (error: any) {
-      // Recent conversations endpoint not available
+  setTyping: (userId, isTyping) => {
+    set((state) => ({
+      typingUsers: {
+        ...state.typingUsers,
+        [userId]: isTyping,
+      },
+    }));
+
+    if (isTyping) {
+      setTimeout(() => {
+        set((state) => ({
+          typingUsers: {
+            ...state.typingUsers,
+            [userId]: false,
+          },
+        }));
+      }, 3000);
     }
   },
 
-  getMessages: async (userId: string) => {
-    set({ isMessagesLoading: true });
-    try {
-      const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: res.data });
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: error.response?.data?.message || 'Failed to load messages' });
-    } finally {
-      set({ isMessagesLoading: false });
-    }
-  },
-
-  sendMessage: async (messageData: { text?: string; image?: string }) => {
-    const { selectedUser, messages, recentConversations } = get();
-    if (!selectedUser) return;
-
-    try {
-      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      const newMessage: Message = res.data;
-
-      set({ messages: [...messages, newMessage] });
-
-      const updatedConversations = recentConversations.filter(
-        conv => conv.user._id !== selectedUser._id
-      );
-
-      const newConversation: RecentConversation = {
-        _id: selectedUser._id,
-        user: selectedUser,
-        lastMessage: newMessage,
-        unreadCount: 0,
-      };
-
-      set({ recentConversations: [newConversation, ...updatedConversations] });
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: error.response?.data?.message || 'Failed to send message' });
-    }
-  },
-
-  subscribeToMessages: () => {
-    const { selectedUser, recentConversations } = get();
-    if (!selectedUser) return;
-
+  subscribeToMessages: (onNewMessage) => {
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
 
     socket.on('newMessage', (newMessage: Message) => {
-      const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
-      const isMessageSentToSelectedUser = newMessage.receiverId === selectedUser._id;
-
-      if (isMessageSentFromSelectedUser || isMessageSentToSelectedUser) {
-        set({
-          messages: [...get().messages, newMessage],
+      onNewMessage(newMessage);
+      
+      // Auto-mark as seen if conversation is open
+      const selectedUser = get().selectedUser;
+      const authUser = useAuthStore.getState().authUser;
+      
+      if (selectedUser && authUser && 
+          (newMessage.senderId === selectedUser._id || newMessage.receiverId === selectedUser._id)) {
+        const conversationId = [authUser._id, selectedUser._id].sort().join('_');
+        socket.emit('mark_as_seen', {
+          conversationId,
+          userId: authUser._id,
         });
-      }
-
-      if (isMessageSentFromSelectedUser) {
-        const senderId = newMessage.senderId;
-        const sender = get().users.find(user => user._id === senderId);
-
-        if (sender) {
-          const updatedConversations = recentConversations.filter(
-            conv => conv.user._id !== senderId
-          );
-
-          const newConversation: RecentConversation = {
-            _id: senderId,
-            user: sender,
-            lastMessage: newMessage,
-            unreadCount: selectedUser._id === senderId ? 0 : 1,
-          };
-
-          set({ recentConversations: [newConversation, ...updatedConversations] });
-        }
       }
     });
   },
@@ -156,17 +120,70 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  setSelectedUser: (selectedUser: User | null) => {
-    set({ selectedUser });
+  subscribeToTyping: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
 
-    if (selectedUser) {
-      const { recentConversations } = get();
-      const updatedConversations = recentConversations.map(conv =>
-        conv.user._id === selectedUser._id
-          ? { ...conv, unreadCount: 0 }
-          : conv
-      );
-      set({ recentConversations: updatedConversations });
+    socket.on('user_typing', ({ userId, isTyping }: { userId: string; isTyping: boolean }) => {
+      get().setTyping(userId, isTyping);
+    });
+  },
+
+  unsubscribeFromTyping: () => {
+    const socket = useAuthStore.getState().socket;
+    if (socket) {
+      socket.off('user_typing');
     }
+  },
+
+  emitTyping: (receiverId: string) => {
+    const socket = useAuthStore.getState().socket;
+    const authUser = useAuthStore.getState().authUser;
+    if (!socket || !authUser) return;
+
+    const conversationId = [authUser._id, receiverId].sort().join('_');
+    socket.emit('typing', {
+      conversationId,
+      userId: authUser._id,
+    });
+  },
+
+  emitStopTyping: (receiverId: string) => {
+    const socket = useAuthStore.getState().socket;
+    const authUser = useAuthStore.getState().authUser;
+    if (!socket || !authUser) return;
+
+    const conversationId = [authUser._id, receiverId].sort().join('_');
+    socket.emit('stop_typing', {
+      conversationId,
+      userId: authUser._id,
+    });
+  },
+
+  // NEW: Receipt subscriptions
+  subscribeToReceipts: (onDelivered, onSeen) => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+
+    socket.on('message_delivered', onDelivered);
+    socket.on('messages_seen', onSeen);
+  },
+
+  unsubscribeFromReceipts: () => {
+    const socket = useAuthStore.getState().socket;
+    if (socket) {
+      socket.off('message_delivered');
+      socket.off('messages_seen');
+    }
+  },
+
+  markAsSeen: (conversationId: string, userId: string) => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+
+    socket.emit('mark_as_seen', {
+      conversationId,
+      userId,
+    });
   },
 }));

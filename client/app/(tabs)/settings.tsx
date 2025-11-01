@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
 import { LogOut } from 'lucide-react-native';
-import { useAuthStore } from '../../store/useAuthStore';
+import { useLogout } from '../../hooks/useAuth';
 
 export default function SettingsScreen() {
-  const { logout } = useAuthStore();
+  const logoutMutation = useLogout();
 
   const handleLogout = () => {
     Alert.alert(
@@ -12,7 +12,11 @@ export default function SettingsScreen() {
       'Are you sure you want to log out?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: logout },
+        { 
+          text: 'Logout', 
+          style: 'destructive', 
+          onPress: () => logoutMutation.mutate() 
+        },
       ]
     );
   };
@@ -21,9 +25,15 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Settings</Text>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <TouchableOpacity 
+          style={styles.logoutButton} 
+          onPress={handleLogout}
+          disabled={logoutMutation.isPending}
+        >
           <LogOut size={18} color="#fff" />
-          <Text style={styles.logoutText}>Log Out</Text>
+          <Text style={styles.logoutText}>
+            {logoutMutation.isPending ? 'Logging out...' : 'Log Out'}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
