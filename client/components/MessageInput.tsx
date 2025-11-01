@@ -24,7 +24,9 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
   const [text, setText] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const { selectedUser } = useChatStore();
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { selectedUser, emitTyping, emitStopTyping } = useChatStore();
   const sendMessageMutation = useSendMessage(selectedUser?._id || '');
   const textInputRef = useRef<TextInput>(null);
 
@@ -42,6 +44,40 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
       keyboardDidHideListener?.remove();
     };
   }, []);
+
+  // Cleanup typing timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleTextChange = (newText: string) => {
+    setText(newText);
+    
+    if (!selectedUser) return;
+
+    // Emit typing event
+    if (newText.length > 0 && !isTyping) {
+      setIsTyping(true);
+      emitTyping(selectedUser._id);
+    }
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set new timeout - stop typing after 500ms of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isTyping) {
+        setIsTyping(false);
+        emitStopTyping(selectedUser._id);
+      }
+    }, 500);
+  };
 
   const handleImagePicker = async () => {
     try {
@@ -80,6 +116,15 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
   const handleSendMessage = () => {
     if (!text.trim() && !imagePreview) return;
 
+    // Stop typing indicator when sending
+    if (isTyping && selectedUser) {
+      setIsTyping(false);
+      emitStopTyping(selectedUser._id);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    }
+
     sendMessageMutation.mutate(
       {
         text: text.trim(),
@@ -93,6 +138,17 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
         },
       }
     );
+  };
+
+  const handleBlur = () => {
+    // Stop typing when input loses focus
+    if (isTyping && selectedUser) {
+      setIsTyping(false);
+      emitStopTyping(selectedUser._id);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    }
   };
 
   return (
@@ -126,7 +182,8 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
             placeholder="Type a message..."
             placeholderTextColor="#9ca3af"
             value={text}
-            onChangeText={setText}
+            onChangeText={handleTextChange}
+            onBlur={handleBlur}
             multiline
             maxLength={1000}
             textAlignVertical="top"

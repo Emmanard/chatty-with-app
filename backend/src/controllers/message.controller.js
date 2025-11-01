@@ -44,12 +44,12 @@ export const getRecentConversations = async (req, res) => {
       }
     }
     
-    // Calculate unread message counts (messages received but not read)
+    // Calculate unread message counts (messages received but not seen)
     for (const [partnerId, conversation] of conversationsMap) {
       const unreadCount = await Message.countDocuments({
         senderId: partnerId,
         receiverId: loggedInUserId,
-        createdAt: { $gt: conversation.lastMessage.createdAt }
+        isSeenBy: { $ne: loggedInUserId } // Updated to use isSeenBy
       });
       conversation.unreadCount = unreadCount;
     }
@@ -89,8 +89,8 @@ export const getMessages = async (req, res) => {
     const myId = req.user._id;
     
     // Pagination parameters
-    const limit = parseInt(req.query.limit) || 50; // Default 50 messages per page
-    const cursor = req.query.cursor; // Message ID to start from (for cursor-based pagination)
+    const limit = parseInt(req.query.limit) || 50;
+    const cursor = req.query.cursor;
 
     // Build the query
     const query = {
@@ -100,27 +100,26 @@ export const getMessages = async (req, res) => {
       ],
     };
 
-   if (cursor) {
-  const cursorMessage = await Message.findById(cursor);
-  if (cursorMessage) {
-  query.createdAt = { $lt: cursorMessage.createdAt };
-  }
-}
+    if (cursor) {
+      const cursorMessage = await Message.findById(cursor);
+      if (cursorMessage) {
+        query.createdAt = { $lt: cursorMessage.createdAt };
+      }
+    }
 
     // Fetch messages with limit + 1 to check if there are more
     const messages = await Message.find(query)
-      .sort({ createdAt: -1 }) // Most recent first
+      .sort({ createdAt: -1 })
       .limit(limit + 1);
 
     // Check if there are more messages
     const hasMore = messages.length > limit;
     
-    // Remove the extra message if it exists
     if (hasMore) {
       messages.pop();
     }
 
-    // Get the next cursor (oldest message's ID in current batch)
+    // Get the next cursor
     const nextCursor = hasMore && messages.length > 0 
       ? messages[messages.length - 1]._id.toString() 
       : null;
@@ -139,7 +138,6 @@ export const getMessages = async (req, res) => {
   }
 };
 
-
 export const sendMessage = async (req, res) => {
   try {
     const { text, image } = req.body;
@@ -148,23 +146,49 @@ export const sendMessage = async (req, res) => {
 
     let imageUrl;
     if (image) {
-      // Upload base64 image to cloudinary
       const uploadResponse = await cloudinary.uploader.upload(image);
       imageUrl = uploadResponse.secure_url;
     }
 
+    // ============================================
+    // CREATE MESSAGE WITH DELIVERY TRACKING
+    // ============================================
     const newMessage = new Message({
       senderId,
       receiverId,
       text,
       image: imageUrl,
+      isDeliveredTo: [], // Will be populated if receiver is online
+      isSeenBy: [],
+      status: 'sent'
     });
 
     await newMessage.save();
 
+    // ============================================
+    // CHECK IF RECEIVER IS ONLINE
+    // ============================================
     const receiverSocketId = getReceiverSocketId(receiverId);
+    
     if (receiverSocketId) {
+      // Receiver is online - mark as delivered immediately
+      newMessage.isDeliveredTo.push(receiverId);
+      newMessage.status = 'delivered';
+      await newMessage.save();
+
+      // Emit to receiver
       io.to(receiverSocketId).emit("newMessage", newMessage);
+
+      // Notify sender that message was delivered
+      io.to(getReceiverSocketId(senderId.toString())).emit("message_delivered", {
+        messageId: newMessage._id.toString(),
+        deliveredTo: receiverId,
+        deliveredAt: new Date()
+      });
+
+      console.log(`✅ Message delivered immediately to online user ${receiverId}`);
+    } else {
+      console.log(`📭 Receiver ${receiverId} is offline - message will be delivered when they come online`);
     }
 
     res.status(201).json(newMessage);
@@ -173,4 +197,3 @@ export const sendMessage = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
-
