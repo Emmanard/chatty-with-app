@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   FlatList,
   Text,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChatStore } from '../store/useChatStore';
@@ -30,14 +31,12 @@ export default function ChatContainer() {
 
   const flatListRef = useRef<FlatList>(null);
 
-  // Flatten pages so oldest messages are first, newest last.
-// We reverse pages because pages[0] is the most-recent page returned by react-query.
-const messages = (data?.pages ?? [])
-  .slice()               
-  .reverse()              
-  .flatMap((page) => page.messages)
-  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
+  // Flatten pages so oldest messages are first, newest last
+  const messages = (data?.pages ?? [])
+    .slice()               
+    .reverse()              
+    .flatMap((page) => page.messages)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -48,40 +47,60 @@ const messages = (data?.pages ?? [])
     }
   }, [messages.length]);
 
-  if (!authUser || !selectedUser) {
-    return null;
-  }
+  // App state monitoring - mark messages as seen when app comes to foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && selectedUser && authUser) {
+        const conversationId = [authUser._id, selectedUser._id].sort().join('_');
+        const socket = useAuthStore.getState().socket;
+        if (socket) {
+          socket.emit('mark_as_seen', {
+            conversationId,
+            userId: authUser._id,
+          });
+        }
+      }
+    });
 
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <ChatHeader />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+    return () => {
+      subscription?.remove();
+    };
+  }, [selectedUser, authUser]);
 
-  const handleLoadMore = () => {
+  // ✅ PERFORMANCE FIX: Memoize callbacks
+  const handleLoadMore = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) {
       fetchNextPage();
     }
-  };
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const renderMessage = ({ item }: any) => (
-    <Message
-      message={item}
-      isOwn={item.senderId === authUser._id}
-      senderImage={
-        item.senderId === authUser._id
-          ? authUser.profilePic
-          : selectedUser.profilePic
-      }
-    />
+  const keyExtractor = useCallback((item: any) => item._id, []);
+
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({
+      length: 100, // Approximate height of message
+      offset: 100 * index,
+      index,
+    }),
+    []
   );
 
-  const ListHeaderComponent = () => {
+  const renderMessage = useCallback(
+    ({ item }: any) => (
+      <Message
+        message={item}
+        isOwn={item.senderId === authUser?._id}
+        senderImage={
+          item.senderId === authUser?._id
+            ? authUser?.profilePic
+            : selectedUser?.profilePic
+        }
+      />
+    ),
+    [authUser?._id, authUser?.profilePic, selectedUser?.profilePic]
+  );
+
+  const ListHeaderComponent = useCallback(() => {
     if (isFetchingNextPage) {
       return (
         <View style={styles.loadMoreContainer}>
@@ -100,13 +119,37 @@ const messages = (data?.pages ?? [])
     }
 
     return null;
-  };
+  }, [isFetchingNextPage, hasNextPage, messages.length]);
 
-  const ListEmptyComponent = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyText}>No messages yet. Say hi! 👋</Text>
-    </View>
+  const ListEmptyComponent = useCallback(
+    () => (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>No messages yet. Say hi! 👋</Text>
+      </View>
+    ),
+    []
   );
+
+  const handleMessageSent = useCallback(() => {
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, []);
+
+  if (!authUser || !selectedUser) {
+    return null;
+  }
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <ChatHeader />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -116,35 +159,32 @@ const messages = (data?.pages ?? [])
         keyboardVerticalOffset={0}
       >
         <ChatHeader />
-<FlatList
-  ref={flatListRef}
-  data={messages}
-  renderItem={renderMessage}
-  keyExtractor={(item) => item._id}
-  contentContainerStyle={styles.messagesContent}
-  showsVerticalScrollIndicator={false}
-  onEndReached={handleLoadMore}
-  onEndReachedThreshold={0.5}
-  ListHeaderComponent={ListHeaderComponent}
-  ListEmptyComponent={ListEmptyComponent}
-  keyboardShouldPersistTaps="handled"
-  maintainVisibleContentPosition={{
-    minIndexForVisible: 0,
-    autoscrollToTopThreshold: 10,
-  }}
- 
-  windowSize={5}               
-  maxToRenderPerBatch={20}      
-  removeClippedSubviews={true}  
-/>
-
-        <MessageInput
-          onMessageSent={() => {
-            setTimeout(() => {
-              flatListRef.current?.scrollToEnd({ animated: true });
-            }, 100);
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={keyExtractor}
+          getItemLayout={getItemLayout}
+          contentContainerStyle={styles.messagesContent}
+          showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListHeaderComponent={ListHeaderComponent}
+          ListEmptyComponent={ListEmptyComponent}
+          keyboardShouldPersistTaps="handled"
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+            autoscrollToTopThreshold: 10,
           }}
+          // ✅ CRITICAL PERFORMANCE OPTIMIZATIONS
+          windowSize={10}
+          maxToRenderPerBatch={10}
+          initialNumToRender={15}
+          removeClippedSubviews={Platform.OS === 'android'}
+          updateCellsBatchingPeriod={50}
         />
+
+        <MessageInput onMessageSent={handleMessageSent} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

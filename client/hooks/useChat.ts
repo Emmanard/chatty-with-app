@@ -19,6 +19,10 @@ interface Message {
   text?: string;
   image?: string;
   createdAt: string;
+  // NEW: Receipt fields
+  isDeliveredTo?: string[];
+  isSeenBy?: string[];
+  status?: 'sent' | 'delivered' | 'seen';
 }
 
 interface RecentConversation {
@@ -103,7 +107,13 @@ export const useConversations = () => {
 
 export const useMessages = (userId: string | null) => {
   const queryClient = useQueryClient();
-  const { subscribeToMessages, unsubscribeFromMessages } = useChatStore();
+  const { 
+    subscribeToMessages, 
+    unsubscribeFromMessages,
+    subscribeToReceipts,
+    unsubscribeFromReceipts,
+    markAsSeen
+  } = useChatStore();
   const { authUser } = useAuthStore();
 
   const query = useInfiniteQuery<
@@ -173,9 +183,56 @@ export const useMessages = (userId: string | null) => {
       }
     };
 
+    // NEW: Handle delivery receipts
+    const handleDelivered = ({ messageId, deliveredTo }: any) => {
+      queryClient.setQueryData(['messages', userId], (oldData: any) => {
+        if (!oldData) return oldData;
+
+        const newPages = oldData.pages.map((page: any) => ({
+          ...page,
+          messages: page.messages.map((msg: Message) =>
+            msg._id === messageId
+              ? { ...msg, status: 'delivered', isDeliveredTo: [deliveredTo] }
+              : msg
+          ),
+        }));
+
+        return { ...oldData, pages: newPages };
+      });
+    };
+
+    // NEW: Handle seen receipts
+    const handleSeen = ({ messageIds }: any) => {
+      queryClient.setQueryData(['messages', userId], (oldData: any) => {
+        if (!oldData) return oldData;
+
+        const newPages = oldData.pages.map((page: any) => ({
+          ...page,
+          messages: page.messages.map((msg: Message) =>
+            messageIds.includes(msg._id)
+              ? { ...msg, status: 'seen', isSeenBy: [userId] }
+              : msg
+          ),
+        }));
+
+        return { ...oldData, pages: newPages };
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    };
+
     subscribeToMessages(handleNewMessage);
-    return () => unsubscribeFromMessages();
-  }, [userId, authUser, queryClient, subscribeToMessages, unsubscribeFromMessages]);
+    subscribeToReceipts(handleDelivered, handleSeen);
+
+    // Mark messages as seen when opening conversation
+    const conversationId = [authUser._id, userId].sort().join('_');
+    markAsSeen(conversationId, authUser._id);
+
+    return () => {
+      unsubscribeFromMessages();
+      unsubscribeFromReceipts();
+    };
+  }, [userId, authUser, queryClient, subscribeToMessages, unsubscribeFromMessages, subscribeToReceipts, unsubscribeFromReceipts, markAsSeen]);
 
   return query;
 };
@@ -202,6 +259,7 @@ export const useSendMessage = (receiverId: string) => {
         text: newMessageData.text,
         image: newMessageData.image,
         createdAt: new Date().toISOString(),
+        status: 'sent', // NEW: Initialize with sent status
       };
 
       queryClient.setQueryData(['messages', receiverId], (oldData: any) => {
