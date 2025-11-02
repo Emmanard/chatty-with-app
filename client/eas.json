@@ -21,6 +21,8 @@
       "autoIncrement": true,
       "android": {
         "buildType": "apk"
+      },"env": {
+       "BASE_URL": "https://chatty-with-app.onrender.com/api"
       }
     }
   },

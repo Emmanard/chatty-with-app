@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
   Text,
   AppState,
   useColorScheme,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChatStore } from '../store/useChatStore';
@@ -40,14 +41,14 @@ export default function ChatContainer() {
     .flatMap((page) => page.messages)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+  // Scroll to bottom on new messages
   useEffect(() => {
     if (messages.length > 0 && flatListRef.current) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [messages.length]);
 
+  // Mark seen on app focus
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && selectedUser && authUser) {
@@ -56,7 +57,6 @@ export default function ChatContainer() {
         socket?.emit('mark_as_seen', { conversationId, userId: authUser._id });
       }
     });
-
     return () => subscription?.remove();
   }, [selectedUser, authUser]);
 
@@ -127,29 +127,48 @@ export default function ChatContainer() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? '#121212' : '#fff' }]} edges={['top', 'left', 'right']}>
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ChatHeader />
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={keyExtractor}
-          getItemLayout={getItemLayout}
-          contentContainerStyle={[styles.messagesContent, { paddingBottom: 8 }]}
-          showsVerticalScrollIndicator={false}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          ListHeaderComponent={ListHeaderComponent}
-          ListEmptyComponent={ListEmptyComponent}
-          keyboardShouldPersistTaps="handled"
-          maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 10 }}
-          windowSize={10}
-          maxToRenderPerBatch={10}
-          initialNumToRender={15}
-          removeClippedSubviews={Platform.OS === 'android'}
-          updateCellsBatchingPeriod={50}
-        />
-        <MessageInput onMessageSent={handleMessageSent} />
+      <ChatHeader />
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={{ flex: 1 }}>
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={keyExtractor}
+            getItemLayout={getItemLayout}
+            contentContainerStyle={[styles.messagesContent, { paddingBottom: 8 }]}
+            showsVerticalScrollIndicator={false}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.5}
+            ListHeaderComponent={ListHeaderComponent}
+            ListEmptyComponent={ListEmptyComponent}
+            keyboardShouldPersistTaps="handled"
+            maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 10 }}
+            windowSize={10}
+            maxToRenderPerBatch={10}
+            initialNumToRender={15}
+            removeClippedSubviews={Platform.OS === 'android'}
+            updateCellsBatchingPeriod={50}
+            onScrollBeginDrag={Keyboard.dismiss}
+          />
+
+          <View
+            style={[
+              styles.inputBar,
+              {
+                backgroundColor: isDark ? '#1c1c1c' : '#f9fafb',
+                borderColor: isDark ? '#2a2a2a' : '#e5e7eb',
+              },
+            ]}
+          >
+            <MessageInput onMessageSent={handleMessageSent} />
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -157,7 +176,6 @@ export default function ChatContainer() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   messagesContent: { padding: 16 },
   loadMoreContainer: { padding: 16, alignItems: 'center' },
@@ -165,4 +183,9 @@ const styles = StyleSheet.create({
   endText: { fontSize: 14 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   emptyText: { fontSize: 16, textAlign: 'center' },
+  inputBar: {
+    borderTopWidth: 1,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 6,
+    paddingHorizontal: 8,
+  },
 });

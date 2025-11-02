@@ -2,13 +2,14 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   FlatList,
   Text,
   AppState,
   useColorScheme,
+  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGroupStore } from '../store/useGroupStore';
@@ -24,9 +25,8 @@ export default function GroupChatContainer() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useGroupMessages(
-    selectedGroup?._id || null
-  );
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useGroupMessages(selectedGroup?._id || null);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -36,14 +36,13 @@ export default function GroupChatContainer() {
     .flatMap((page) => page.messages)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     if (messages.length && flatListRef.current) {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [messages.length]);
 
-  // Mark group as seen when app comes to foreground
+  // mark seen
   useEffect(() => {
     if (!selectedGroup || !authUser) return;
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -133,16 +132,24 @@ export default function GroupChatContainer() {
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? '#121212' : '#fff' }]} edges={['top', 'left', 'right']}>
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ChatHeader />
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: isDark ? '#121212' : '#fff' }]}
+      edges={['top', 'left', 'right']}
+    >
+      <ChatHeader />
+
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0} // 👈 increase if still covered
+      >
         <FlatList
           ref={flatListRef}
           data={messages}
           renderItem={renderMessage}
           keyExtractor={keyExtractor}
           getItemLayout={getItemLayout}
-          contentContainerStyle={[styles.messagesContent, { paddingBottom: 8 }]}
+          contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
@@ -155,8 +162,21 @@ export default function GroupChatContainer() {
           initialNumToRender={15}
           removeClippedSubviews={Platform.OS === 'android'}
           updateCellsBatchingPeriod={50}
+          onScrollBeginDrag={Keyboard.dismiss}
         />
-        <MessageInput onMessageSent={handleMessageSent} />
+
+        {/* Fixed input bar */}
+        <View
+  style={[
+    styles.inputBar,
+    {
+      backgroundColor: isDark ? '#1c1c1c' : '#f9fafb',
+      borderColor: isDark ? '#2a2a2a' : '#e5e7eb',
+    },
+  ]}
+>
+  <MessageInput onMessageSent={handleMessageSent} />
+</View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -166,10 +186,17 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  messagesContent: { padding: 16 },
+  messagesContent: { padding: 16, paddingBottom: 8 },
   loadMoreContainer: { padding: 16, alignItems: 'center' },
   loadMoreText: { marginTop: 8, fontSize: 14 },
   endText: { fontSize: 14 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   emptyText: { fontSize: 16, textAlign: 'center' },
+  inputBar: {
+    borderTopWidth: 1,
+    borderColor: '#eee',
+    backgroundColor: '#fff',
+    paddingVertical: Platform.OS === 'ios' ? 12 : 6,
+    paddingHorizontal: 8,
+  },
 });

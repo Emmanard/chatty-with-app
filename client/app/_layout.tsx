@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { StyleSheet, View, ActivityIndicator, Platform, ToastAndroid, Alert, useColorScheme } from "react-native";
+import {
+  StyleSheet,
+  View,
+  ActivityIndicator,
+  Platform,
+  ToastAndroid,
+  Alert,
+  useColorScheme,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Toast from "react-native-toast-message";
@@ -51,21 +60,26 @@ function AppContent() {
 
   if (isCheckingAuth) {
     return (
-      <View style={[styles.container, { backgroundColor }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+        <StatusBar style={isDark ? "light" : "dark"} />
         <ActivityIndicator size="large" color={indicatorColor} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor }]}>
-      <StatusBar style={isDark ? "light" : "dark"} backgroundColor={backgroundColor} />
+    <SafeAreaView style={[styles.container, { backgroundColor }]}>
+      {/* StatusBar controls icon/text color only */}
+      <StatusBar style={isDark ? "light" : "dark"} />
+
       <Stack screenOptions={{ headerShown: false }} />
       <Toast />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
 });
