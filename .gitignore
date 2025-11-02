@@ -70,6 +70,7 @@ node_modules/
 jspm_packages/
 client/node_modules/
 backend/node_modules/
+eas.json
 
 # Optional npm cache directory
 .npm
