@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { io } from 'socket.io-client';
+import Constants from 'expo-constants';
 
-const BASE_URL = 'https://chatty-with-app.onrender.com';
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL;
 
 interface AuthUser {
   _id: string;
@@ -37,29 +38,26 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   connectSocket: () => {
     const { authUser } = get();
-    
-    if (!authUser || get().socket?.connected) {
-      return;
-    }
-    
-    const socket = io(BASE_URL, {
-      query: {
-        userId: authUser._id,
-      },
-    });
-    
-    socket.connect();
-    set({ socket: socket });
+    if (!authUser || get().socket?.connected) return;
 
-    socket.on('getOnlineUsers', (userIds) => {
+    const SOCKET_URL = BASE_URL.replace('/api', '');
+
+    const socket = io(SOCKET_URL, {
+      query: { userId: authUser._id },
+      transports: ['websocket'],
+      autoConnect: true,
+    });
+
+    set({ socket });
+
+    socket.on('getOnlineUsers', (userIds: string[]) => {
       set({ onlineUsers: userIds });
     });
   },
 
   disconnectSocket: () => {
-    if (get().socket?.connected) {
-      get().socket.disconnect();
-    }
+    const socket = get().socket;
+    if (socket?.connected) socket.disconnect();
     set({ socket: null, onlineUsers: [] });
   },
 }));

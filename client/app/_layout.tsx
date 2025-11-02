@@ -1,6 +1,4 @@
-import { useState } from "react";
-import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
+import React, { useState } from "react";
 import {
   StyleSheet,
   View,
@@ -8,13 +6,14 @@ import {
   Platform,
   ToastAndroid,
   Alert,
+  useColorScheme,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import Toast from "react-native-toast-message";
-import {
-  QueryClient,
-  QueryClientProvider,
-  QueryCache,
-} from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryCache } from "@tanstack/react-query";
+
 import { useFrameworkReady } from "../hooks/useFrameworkReady";
 import { useCheckAuth } from "../hooks/useAuth";
 
@@ -22,16 +21,9 @@ export default function RootLayout() {
   const [queryClient] = useState(() => {
     const queryCache = new QueryCache({
       onError: (error: unknown) => {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Something went wrong while fetching data.";
-
-        if (Platform.OS === "android") {
-          ToastAndroid.show(message, ToastAndroid.SHORT);
-        } else {
-          Alert.alert("Error", message);
-        }
+        const message = error instanceof Error ? error.message : "Something went wrong while fetching data.";
+        if (Platform.OS === "android") ToastAndroid.show(message, ToastAndroid.SHORT);
+        else Alert.alert("Error", message);
       },
     });
 
@@ -40,7 +32,7 @@ export default function RootLayout() {
       defaultOptions: {
         queries: {
           staleTime: 1000 * 60 * 2,
-         gcTime: 1000 * 60 * 3,
+          gcTime: 1000 * 60 * 3,
           retry: 2,
           refetchOnWindowFocus: false,
           placeholderData: (prev: unknown) => prev,
@@ -59,40 +51,35 @@ export default function RootLayout() {
 }
 
 function AppContent() {
-  // Now we can use React Query hooks because we're inside QueryClientProvider
   const { isLoading: isCheckingAuth } = useCheckAuth();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+
+  const backgroundColor = isDark ? "#121212" : "#f9fafb";
+  const indicatorColor = isDark ? "#0ea5e9" : "#3b82f6";
 
   if (isCheckingAuth) {
     return (
-      <View style={styles.container}>
-        <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-        </View>
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+        <StatusBar style={isDark ? "light" : "dark"} />
+        <ActivityIndicator size="large" color={indicatorColor} />
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
+    <SafeAreaView style={[styles.container, { backgroundColor }]}>
+      {/* StatusBar controls icon/text color only */}
+      <StatusBar style={isDark ? "light" : "dark"} />
+
+      <Stack screenOptions={{ headerShown: false }} />
       <Toast />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f9fafb",
-  },
-  loader: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
   },
 });

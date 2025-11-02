@@ -7,7 +7,6 @@
     "icon": "assets/images/Image_fx.jpg",
     "scheme": "boltapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -20,7 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "assets/images/Image_fx.jpg",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#ffffff"  
       },
       "permissions": [
         "CAMERA",

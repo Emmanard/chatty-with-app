@@ -1,10 +1,20 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  Alert,
+  useColorScheme,
+} from 'react-native';
 import { LogOut } from 'lucide-react-native';
 import { useLogout } from '../../hooks/useAuth';
 
 export default function SettingsScreen() {
   const logoutMutation = useLogout();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   const handleLogout = () => {
     Alert.alert(
@@ -22,11 +32,26 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={[
+        styles.container,
+        { backgroundColor: isDark ? '#1f1f1f' : '#f9fafb' },
+      ]}
+    >
       <View style={styles.content}>
-        <Text style={styles.title}>Settings</Text>
-        <TouchableOpacity 
-          style={styles.logoutButton} 
+        <Text
+          style={[
+            styles.title,
+            { color: isDark ? '#f9fafb' : '#111827' },
+          ]}
+        >
+          Settings
+        </Text>
+        <TouchableOpacity
+          style={[
+            styles.logoutButton,
+            { backgroundColor: logoutMutation.isPending ? '#b91c1c' : '#ef4444' },
+          ]}
           onPress={handleLogout}
           disabled={logoutMutation.isPending}
         >
@@ -41,10 +66,7 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
+  container: { flex: 1 },
   content: {
     flex: 1,
     justifyContent: 'center',
@@ -55,13 +77,11 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '600',
     marginBottom: 32,
-    color: '#111827',
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#ef4444',
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
