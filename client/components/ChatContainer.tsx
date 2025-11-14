@@ -1,16 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  FlatList,
-  Text,
-  AppState,
-  useColorScheme,
-  Keyboard,
-} from 'react-native';
+import * as reactNative from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChatStore } from '../store/useChatStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -18,22 +7,23 @@ import { useMessages } from '../hooks/useChat';
 import ChatHeader from './ChatHeader';
 import MessageInput from './MessageInput';
 import Message from './Message';
+import { useSendMessage } from '../hooks/useChat';
+import { useOfflineSyncDM } from '../hooks/useChat';
+
 
 export default function ChatContainer() {
   const { selectedUser } = useChatStore();
   const { authUser } = useAuthStore();
-  const colorScheme = useColorScheme();
+  const colorScheme = reactNative.useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const {
-    data,
-    isLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useMessages(selectedUser?._id || null);
+    const sendMessageMutation = useSendMessage(selectedUser?._id || '');
+  useOfflineSyncDM();
 
-  const flatListRef = useRef<FlatList>(null);
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useMessages(selectedUser?._id || null);
+
+  const flatListRef = useRef<reactNative.FlatList>(null);
 
   const messages = (data?.pages ?? [])
     .slice()
@@ -50,7 +40,7 @@ export default function ChatContainer() {
 
   // Mark seen on app focus
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
+    const subscription = reactNative.AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && selectedUser && authUser) {
         const conversationId = [authUser._id, selectedUser._id].sort().join('_');
         const socket = useAuthStore.getState().socket;
@@ -67,31 +57,41 @@ export default function ChatContainer() {
   const keyExtractor = useCallback((item: any) => item._id, []);
   const getItemLayout = useCallback((_item: any, index: number) => ({ length: 100, offset: 100 * index, index }), []);
 
+const handleRetry = useCallback((message: any) => {
+    sendMessageMutation.mutate({
+      text: message.text,
+      image: message.image,
+      tempId: message.tempId, // Reuse same tempId
+    });
+  }, [sendMessageMutation]);
+
+
   const renderMessage = useCallback(
     ({ item }: any) => (
       <Message
         message={item}
         isOwn={item.senderId === authUser?._id}
         senderImage={item.senderId === authUser?._id ? authUser?.profilePic : selectedUser?.profilePic}
+        onRetry={handleRetry} // 🆕 Pass retry handler
       />
     ),
-    [authUser?._id, authUser?.profilePic, selectedUser?.profilePic]
+    [authUser?._id, authUser?.profilePic, selectedUser?.profilePic, handleRetry] 
   );
 
   const ListHeaderComponent = useCallback(() => {
     if (isFetchingNextPage) {
       return (
-        <View style={styles.loadMoreContainer}>
-          <ActivityIndicator size="small" color={isDark ? '#0ea5e9' : '#3b82f6'} />
-          <Text style={[styles.loadMoreText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Loading older messages...</Text>
-        </View>
+        <reactNative.View style={styles.loadMoreContainer}>
+          <reactNative.ActivityIndicator size="small" color={isDark ? '#0ea5e9' : '#3b82f6'} />
+          <reactNative.Text style={[styles.loadMoreText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Loading older messages...</reactNative.Text>
+        </reactNative.View>
       );
     }
     if (!hasNextPage && messages.length > 0) {
       return (
-        <View style={styles.loadMoreContainer}>
-          <Text style={[styles.endText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>No more messages</Text>
-        </View>
+        <reactNative.View style={styles.loadMoreContainer}>
+          <reactNative.Text style={[styles.endText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>No more messages</reactNative.Text>
+        </reactNative.View>
       );
     }
     return null;
@@ -99,11 +99,11 @@ export default function ChatContainer() {
 
   const ListEmptyComponent = useCallback(
     () => (
-      <View style={styles.emptyContainer}>
-        <Text style={[styles.emptyText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
+      <reactNative.View style={styles.emptyContainer}>
+        <reactNative.Text style={[styles.emptyText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
           No messages yet. Say hi! 👋
-        </Text>
-      </View>
+        </reactNative.Text>
+      </reactNative.View>
     ),
     [isDark]
   );
@@ -118,9 +118,9 @@ export default function ChatContainer() {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? '#121212' : '#fff' }]}>
         <ChatHeader />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={isDark ? '#0ea5e9' : '#3b82f6'} />
-        </View>
+        <reactNative.View style={styles.loadingContainer}>
+          <reactNative.ActivityIndicator size="large" color={isDark ? '#0ea5e9' : '#3b82f6'} />
+        </reactNative.View>
       </SafeAreaView>
     );
   }
@@ -129,13 +129,13 @@ export default function ChatContainer() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? '#121212' : '#fff' }]} edges={['top', 'left', 'right']}>
       <ChatHeader />
 
-      <KeyboardAvoidingView
+      <reactNative.KeyboardAvoidingView
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={reactNative.Platform.OS === 'ios' ? 90 : 0}
+        behavior={reactNative.Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={{ flex: 1 }}>
-          <FlatList
+        <reactNative.View style={{ flex: 1 }}>
+          <reactNative.FlatList
             ref={flatListRef}
             data={messages}
             renderItem={renderMessage}
@@ -152,12 +152,12 @@ export default function ChatContainer() {
             windowSize={10}
             maxToRenderPerBatch={10}
             initialNumToRender={15}
-            removeClippedSubviews={Platform.OS === 'android'}
+            removeClippedSubviews={reactNative.Platform.OS === 'android'}
             updateCellsBatchingPeriod={50}
-            onScrollBeginDrag={Keyboard.dismiss}
+            onScrollBeginDrag={reactNative.Keyboard.dismiss}
           />
 
-          <View
+          <reactNative.View
             style={[
               styles.inputBar,
               {
@@ -167,14 +167,14 @@ export default function ChatContainer() {
             ]}
           >
             <MessageInput onMessageSent={handleMessageSent} />
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+          </reactNative.View>
+        </reactNative.View>
+      </reactNative.KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = reactNative.StyleSheet.create({
   safeArea: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   messagesContent: { padding: 16 },
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, textAlign: 'center' },
   inputBar: {
     borderTopWidth: 1,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 6,
+    paddingVertical: reactNative.Platform.OS === 'ios' ? 12 : 6,
     paddingHorizontal: 8,
   },
 });

@@ -25,8 +25,10 @@ export interface GroupMessage {
     userId: string;
     seenAt: string;
   }>;
-  status: 'sent' | 'delivered' | 'seen';
+  status:'sent' | 'delivered' | 'seen' | 'sending' | 'pending' | 'failed'; 
   deletedFor: string[];
+    tempId?: string; 
+  error?: string; 
   replyTo?: string;
   deliveryCount?: number;
   readCount?: number;

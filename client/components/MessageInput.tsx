@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Image as ImageIcon, Send, X } from 'lucide-react-native';
 import { useChatStore } from '../store/useChatStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { useGroupStore } from '../store/useGroupStore';
 import { useSendMessage } from '../hooks/useChat';
 import { useSendGroupMessage } from '../hooks/useGroup';
@@ -66,21 +67,35 @@ export default function MessageInput({ onMessageSent }: MessageInputProps) {
   };
 
   const handleSendMessage = () => {
-    if (!text.trim() && !imagePreview) return;
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+  if (!text.trim() && !imagePreview) return;
+  
+  // 🔍 COMPLETE DEBUG - Add this entire block
+  const { authUser, isOnline, socket } = useAuthStore.getState();
+  const socketConnected = socket?.connected || false;
+  
+  console.log('═══════════════════════════════════════');
+  console.log('🔎 SEND DEBUG:');
+  console.log('authUser:', authUser?._id || 'NULL');
+  console.log('isOnline:', isOnline);
+  console.log('socket.connected:', socketConnected);
+  console.log('selectedUser:', selectedUser?._id || 'NULL');
+  console.log('selectedGroup:', selectedGroup?._id || 'NULL');
+  console.log('messageData:', { text: text.trim(), image: !!imagePreview });
+  console.log('═══════════════════════════════════════');
+  
+  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
-    const messageData = { text: text.trim(), image: imagePreview ?? undefined };
-    if (isGroup) {
-      sendGroupMessageMutation.mutate(messageData, {
-        onSuccess: () => { setText(''); setImagePreview(null); onMessageSent?.(); },
-      });
-    } else {
-      sendMessageMutation.mutate(messageData, {
-        onSuccess: () => { setText(''); setImagePreview(null); onMessageSent?.(); },
-      });
-    }
-  };
-
+  const messageData = { text: text.trim(), image: imagePreview ?? undefined };
+  if (isGroup) {
+    sendGroupMessageMutation.mutate(messageData, {
+      onSuccess: () => { setText(''); setImagePreview(null); onMessageSent?.(); },
+    });
+  } else {
+    sendMessageMutation.mutate(messageData, {
+      onSuccess: () => { setText(''); setImagePreview(null); onMessageSent?.(); },
+    });
+  }
+};
   const handleBlur = () => {
     if (isTyping) {
       setIsTyping(false);

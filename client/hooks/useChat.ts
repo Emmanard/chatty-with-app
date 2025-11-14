@@ -1,9 +1,12 @@
+import { v4 as uuid } from 'uuid';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, InfiniteData } from '@tanstack/react-query';
-import { axiosInstance } from '../lib/axios';
+import { useEffect } from 'react';
 import { useChatStore } from '../store/useChatStore';
 import { useAuthStore } from '../store/useAuthStore';
+import { getDMPendingMessages, addToDMQueue, removeFromDMQueue } from '../lib/offlineQueue';
+import { axiosInstance } from '../lib/axios';
 import Toast from 'react-native-toast-message';
-import { useEffect } from 'react';
+
 
 interface User {
   _id: string;
@@ -22,7 +25,9 @@ interface Message {
   // NEW: Receipt fields
   isDeliveredTo?: string[];
   isSeenBy?: string[];
-  status?: 'sent' | 'delivered' | 'seen';
+  status?:'sent' | 'delivered' | 'seen' | 'sending' | 'pending' | 'failed'; 
+  tempId?: string; 
+  error?: string;
 }
 
 interface RecentConversation {
@@ -239,19 +244,28 @@ export const useMessages = (userId: string | null) => {
 
 export const useSendMessage = (receiverId: string) => {
   const queryClient = useQueryClient();
-  const { authUser } = useAuthStore();
+  const { authUser, isOnline } = useAuthStore();
 
   return useMutation({
-    mutationFn: async (messageData: { text?: string; image?: string }) => {
-      const res = await axiosInstance.post<Message>(`/messages/send/${receiverId}`, messageData);
+    mutationFn: async (messageData: { text?: string; image?: string; tempId?: string }) => {
+      if (!isOnline) throw new Error('offline');
+
+      const res = await axiosInstance.post<Message>(`/messages/send/${receiverId}`, {
+        text: messageData.text,
+        image: messageData.image,
+      });
+
       return res.data;
     },
+
     onMutate: async (newMessageData) => {
+       console.log('🔎 DM onMutate:', { isOnline, newMessageData });
       if (!authUser) return;
 
       await queryClient.cancelQueries({ queryKey: ['messages', receiverId] });
       const previousData = queryClient.getQueryData(['messages', receiverId]);
 
+      // ✅ Use uuid safely here
       const tempMessage: Message = {
         _id: `temp-${Date.now()}`,
         senderId: authUser._id,
@@ -259,15 +273,22 @@ export const useSendMessage = (receiverId: string) => {
         text: newMessageData.text,
         image: newMessageData.image,
         createdAt: new Date().toISOString(),
-        status: 'sent', // NEW: Initialize with sent status
+        status: isOnline ? 'sending' : 'pending',
+        tempId: newMessageData.tempId || uuid(), // <- safe uuid
       };
 
+      if (!isOnline) await addToDMQueue(tempMessage);
+
       queryClient.setQueryData(['messages', receiverId], (oldData: any) => {
-        if (!oldData) return oldData;
+        if (!oldData) {
+          return { pages: [{ messages: [tempMessage], nextCursor: null, hasMore: false }], pageParams: [null] };
+        }
 
         const newPages = [...oldData.pages];
         const firstPage = { ...newPages[0] };
-        firstPage.messages = [...firstPage.messages, tempMessage];
+        const exists = firstPage.messages.some((m: Message) => m.tempId === tempMessage.tempId || m._id === tempMessage._id);
+
+        if (!exists) firstPage.messages = [...firstPage.messages, tempMessage];
         newPages[0] = firstPage;
 
         return { ...oldData, pages: newPages };
@@ -275,14 +296,19 @@ export const useSendMessage = (receiverId: string) => {
 
       return { previousData, tempMessage };
     },
-    onSuccess: (serverMessage, variables, context) => {
+
+    onSuccess: async (serverMessage, variables, context) => {
+      if (context?.tempMessage?.tempId) await removeFromDMQueue(context.tempMessage.tempId);
+
       queryClient.setQueryData(['messages', receiverId], (oldData: any) => {
         if (!oldData) return oldData;
 
         const newPages = oldData.pages.map((page: any) => ({
           ...page,
           messages: page.messages.map((msg: Message) =>
-            msg._id === context?.tempMessage._id ? serverMessage : msg
+            msg.tempId === context?.tempMessage?.tempId || msg._id === context?.tempMessage?._id
+              ? { ...serverMessage, tempId: context?.tempMessage?.tempId }
+              : msg
           ),
         }));
 
@@ -291,15 +317,109 @@ export const useSendMessage = (receiverId: string) => {
 
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
-    onError: (error: any, variables, context) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(['messages', receiverId], context.previousData);
-      }
 
-      Toast.show({
-        type: 'error',
-        text1: error.response?.data?.message || 'Failed to send message',
+    onError: async (error: any, variables, context) => {
+      queryClient.setQueryData(['messages', receiverId], (oldData: any) => {
+        if (!oldData) return oldData;
+
+        const newPages = oldData.pages.map((page: any) => ({
+          ...page,
+          messages: page.messages.map((msg: Message) =>
+            msg.tempId === context?.tempMessage?.tempId
+              ? { ...msg, status: error.message === 'offline' ? 'pending' : 'failed', error: error.message }
+              : msg
+          ),
+        }));
+
+        return { ...oldData, pages: newPages };
       });
+
+      if (error.message !== 'offline') {
+        Toast.show({ type: 'error', text1: error.response?.data?.message || 'Failed to send message' });
+      }
     },
   });
+};
+
+
+export const useOfflineSyncDM = () => {
+  const queryClient = useQueryClient();
+  const { isOnline, authUser } = useAuthStore();
+
+  useEffect(() => {
+    if (!isOnline || !authUser) return;
+
+    const syncPendingMessages = async () => {
+      const pending = await getDMPendingMessages();
+      console.log(`📤 Syncing ${pending.length} pending DM messages...`);
+
+      for (const message of pending) {
+        // Ensure tempId exists
+        if (!message.tempId) message.tempId = uuid();
+
+        try {
+          // Optimistic UI: mark as sending
+          queryClient.setQueryData(['messages', message.receiverId], (oldData: any) => {
+            if (!oldData) return oldData;
+
+            const newPages = oldData.pages.map((page: any) => ({
+              ...page,
+              messages: page.messages.map((msg: Message) =>
+                msg.tempId === message.tempId ? { ...msg, status: 'sending' } : msg
+              ),
+            }));
+
+            return { ...oldData, pages: newPages };
+          });
+
+          // Send message to server
+          const res = await axiosInstance.post<Message>(
+            `/messages/send/${message.receiverId}`,
+            { text: message.text, image: message.image }
+          );
+
+          // Replace temp message with server message
+          queryClient.setQueryData(['messages', message.receiverId], (oldData: any) => {
+            if (!oldData) return oldData;
+
+            const newPages = oldData.pages.map((page: any) => ({
+              ...page,
+              messages: page.messages.map((msg: Message) =>
+                msg.tempId === message.tempId ? { ...res.data, tempId: message.tempId } : msg
+              ),
+            }));
+
+            return { ...oldData, pages: newPages };
+          });
+
+          // Remove from offline queue
+          await removeFromDMQueue(message.tempId);
+          console.log('✅ Synced DM message:', message.tempId);
+
+        } catch (error: any) {
+          console.error('❌ Failed to sync DM message:', message.tempId, error);
+
+          // Mark as failed in UI
+          queryClient.setQueryData(['messages', message.receiverId], (oldData: any) => {
+            if (!oldData) return oldData;
+
+            const newPages = oldData.pages.map((page: any) => ({
+              ...page,
+              messages: page.messages.map((msg: Message) =>
+                msg.tempId === message.tempId
+                  ? { ...msg, status: 'failed', error: error.message }
+                  : msg
+              ),
+            }));
+
+            return { ...oldData, pages: newPages };
+          });
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    };
+
+    syncPendingMessages();
+  }, [isOnline, authUser, queryClient]);
 };

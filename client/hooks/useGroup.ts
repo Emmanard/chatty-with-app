@@ -1,6 +1,8 @@
 // hooks/useGroup.tsx
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, InfiniteData } from '@tanstack/react-query';
+import { v4 as uuid } from 'uuid';
 import { axiosInstance } from '../lib/axios';
+import { getGroupPendingMessages, addToGroupQueue, removeFromGroupQueue } from '../lib/offlineQueue';
 import { useGroupStore } from '../store/useGroupStore';
 import { useAuthStore } from '../store/useAuthStore';
 import Toast from 'react-native-toast-message';
@@ -263,22 +265,27 @@ export const useCreateGroup = () => {
 // ============================================
 export const useSendGroupMessage = (groupId: string) => {
   const queryClient = useQueryClient();
-  const { authUser } = useAuthStore();
+  const { authUser, isOnline } = useAuthStore();
 
   return useMutation({
-    mutationFn: async (messageData: SendGroupMessageData) => {
+    mutationFn: async (messageData: SendGroupMessageData & { tempId?: string }) => {
+      if (!isOnline) throw new Error('offline');
+
       const res = await axiosInstance.post<GroupMessage>(
         `/groups/${groupId}/messages`,
-        messageData
+        { text: messageData.text, image: messageData.image }
       );
+
       return res.data;
     },
+
     onMutate: async (newMessageData) => {
       if (!authUser) return;
 
       await queryClient.cancelQueries({ queryKey: ['groupMessages', groupId] });
       const previousData = queryClient.getQueryData(['groupMessages', groupId]);
 
+      // ✅ Use uuid safely
       const tempMessage: GroupMessage = {
         _id: `temp-${Date.now()}`,
         conversationId: groupId,
@@ -287,18 +294,30 @@ export const useSendGroupMessage = (groupId: string) => {
         image: newMessageData.image,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        status: 'sent',
+        status: isOnline ? 'sending' : 'pending',
         isDeliveredTo: [],
         isSeenBy: [],
         deletedFor: [],
+        tempId: newMessageData.tempId || uuid(),
       };
 
+      if (!isOnline) await addToGroupQueue(tempMessage);
+
       queryClient.setQueryData(['groupMessages', groupId], (oldData: any) => {
-        if (!oldData) return oldData;
+        if (!oldData) {
+          return {
+            pages: [{ messages: [tempMessage], nextCursor: null, hasMore: false }],
+            pageParams: [null],
+          };
+        }
 
         const newPages = [...oldData.pages];
         const firstPage = { ...newPages[0] };
-        firstPage.messages = [...firstPage.messages, tempMessage];
+        const exists = firstPage.messages.some(
+          (m: GroupMessage) => m.tempId === tempMessage.tempId || m._id === tempMessage._id
+        );
+
+        if (!exists) firstPage.messages = [...firstPage.messages, tempMessage];
         newPages[0] = firstPage;
 
         return { ...oldData, pages: newPages };
@@ -306,14 +325,19 @@ export const useSendGroupMessage = (groupId: string) => {
 
       return { previousData, tempMessage };
     },
-    onSuccess: (serverMessage, variables, context) => {
+
+    onSuccess: async (serverMessage, variables, context) => {
+      if (context?.tempMessage?.tempId) await removeFromGroupQueue(context.tempMessage.tempId);
+
       queryClient.setQueryData(['groupMessages', groupId], (oldData: any) => {
         if (!oldData) return oldData;
 
         const newPages = oldData.pages.map((page: any) => ({
           ...page,
           messages: page.messages.map((msg: GroupMessage) =>
-            msg._id === context?.tempMessage._id ? serverMessage : msg
+            msg.tempId === context?.tempMessage?.tempId || msg._id === context?.tempMessage?._id
+              ? { ...serverMessage, tempId: context?.tempMessage?.tempId }
+              : msg
           ),
         }));
 
@@ -322,15 +346,33 @@ export const useSendGroupMessage = (groupId: string) => {
 
       queryClient.invalidateQueries({ queryKey: ['groups'] });
     },
-    onError: (error: any, variables, context) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(['groupMessages', groupId], context.previousData);
-      }
 
-      Toast.show({
-        type: 'error',
-        text1: error.response?.data?.error || 'Failed to send message',
+    onError: async (error: any, variables, context) => {
+      queryClient.setQueryData(['groupMessages', groupId], (oldData: any) => {
+        if (!oldData) return oldData;
+
+        const newPages = oldData.pages.map((page: any) => ({
+          ...page,
+          messages: page.messages.map((msg: GroupMessage) =>
+            msg.tempId === context?.tempMessage?.tempId
+              ? {
+                  ...msg,
+                  status: error.message === 'offline' ? 'pending' : 'failed',
+                  error: error.message,
+                }
+              : msg
+          ),
+        }));
+
+        return { ...oldData, pages: newPages };
       });
+
+      if (error.message !== 'offline') {
+        Toast.show({
+          type: 'error',
+          text1: error.response?.data?.error || 'Failed to send message',
+        });
+      }
     },
   });
 };
@@ -457,4 +499,84 @@ export const useLeaveGroup = () => {
       });
     },
   });
+};
+
+export const useOfflineSyncGroup = () => {
+  const queryClient = useQueryClient();
+  const { isOnline, authUser } = useAuthStore();
+
+  useEffect(() => {
+    if (!isOnline || !authUser) return;
+
+    const syncPendingMessages = async () => {
+      const pending = await getGroupPendingMessages();
+      console.log(`📤 Syncing ${pending.length} pending group messages...`);
+
+      for (const message of pending) {
+        // Ensure tempId exists
+        if (!message.tempId) message.tempId = uuid();
+
+        try {
+          // Optimistic UI: mark as sending
+          queryClient.setQueryData(['groupMessages', message.conversationId], (oldData: any) => {
+            if (!oldData) return oldData;
+
+            const newPages = oldData.pages.map((page: any) => ({
+              ...page,
+              messages: page.messages.map((msg: GroupMessage) =>
+                msg.tempId === message.tempId ? { ...msg, status: 'sending' } : msg
+              ),
+            }));
+
+            return { ...oldData, pages: newPages };
+          });
+
+          // Send message to server
+          const res = await axiosInstance.post<GroupMessage>(
+            `/groups/${message.conversationId}/messages`,
+            { text: message.text, image: message.image }
+          );
+
+          // Replace temp message with server message in cache
+          queryClient.setQueryData(['groupMessages', message.conversationId], (oldData: any) => {
+            if (!oldData) return oldData;
+
+            const newPages = oldData.pages.map((page: any) => ({
+              ...page,
+              messages: page.messages.map((msg: GroupMessage) =>
+                msg.tempId === message.tempId ? { ...res.data, tempId: message.tempId } : msg
+              ),
+            }));
+
+            return { ...oldData, pages: newPages };
+          });
+
+          // Remove from offline queue
+          await removeFromGroupQueue(message.tempId);
+          console.log('✅ Synced group message:', message.tempId);
+
+        } catch (error: any) {
+          console.error('❌ Failed to sync group message:', message.tempId, error);
+
+          // Mark message as failed
+          queryClient.setQueryData(['groupMessages', message.conversationId], (oldData: any) => {
+            if (!oldData) return oldData;
+
+            const newPages = oldData.pages.map((page: any) => ({
+              ...page,
+              messages: page.messages.map((msg: GroupMessage) =>
+                msg.tempId === message.tempId ? { ...msg, status: 'failed', error: error.message } : msg
+              ),
+            }));
+
+            return { ...oldData, pages: newPages };
+          });
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+    };
+
+    syncPendingMessages();
+  }, [isOnline, authUser, queryClient]);
 };
