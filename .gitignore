@@ -87,3 +87,5 @@ eas.json
 
 # OS generated files
 Thumbs.db
+temp_auto_push.bat
+temp_interactive_push.bat
